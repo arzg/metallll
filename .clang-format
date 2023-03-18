@@ -1,1 +1,4 @@
 BasedOnStyle: WebKit
+ContinuationIndentWidth: 8
+IndentWidth: 8
+UseTab: ForIndentation
