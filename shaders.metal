@@ -4,12 +4,12 @@ using namespace metal;
 
 struct Vertex {
 	float4 position;
-	float4 color;
 };
 
 struct Uniforms {
 	float4 translation;
 	float4 scale;
+	float4 color;
 };
 
 struct VertexOut {
@@ -28,7 +28,7 @@ vertex VertexOut vertexShader(
 	Uniforms u = uniformsBuffer[iid];
 	return {
 		.position = v.position * u.scale + u.translation,
-		.color = clamp(v.color, float4(0), float4(*edrMax)),
+		.color = clamp(u.color, float4(0), float4(*edrMax)),
 	};
 }
 

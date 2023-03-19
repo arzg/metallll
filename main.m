@@ -6,13 +6,15 @@
 
 struct Vertex {
 	vector_float4 position;
-	vector_float4 color;
 };
 
 struct Uniforms {
 	vector_float4 translation;
 	vector_float4 scale;
+	vector_float4 color;
 };
+
+#define QUAD_COUNT 5
 
 @interface MainView : MTKView {
 	id<MTLCommandQueue> commandQueue;
@@ -37,10 +39,10 @@ struct Uniforms {
 	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
 	struct Vertex vertexBufferData[4] = {
-		{ .position = { -1, -1, 0, 1 }, .color = { 1, 0, 0, 1 } },
-		{ .position = { -1, 1, 0, 1 }, .color = { 0, 1, 0, 1 } },
-		{ .position = { 1, 1, 0, 1 }, .color = { 0, 0, 1, 1 } },
-		{ .position = { 1, -1, 0, 1 }, .color = { 0, 0, 1, 1 } }
+		{ .position = { -1, -1, 0, 1 } },
+		{ .position = { -1, 1, 0, 1 } },
+		{ .position = { 1, 1, 0, 1 } },
+		{ .position = { 1, -1, 0, 1 } }
 	};
 	vertexBuffer = [device newBufferWithBytes:vertexBufferData
 	                                   length:sizeof(vertexBufferData)
@@ -51,7 +53,7 @@ struct Uniforms {
 	                                  length:sizeof(indexBufferData)
 	                                 options:MTLResourceCPUCacheModeDefaultCache];
 
-	uniformsBuffer = [device newBufferWithLength:sizeof(struct Uniforms)
+	uniformsBuffer = [device newBufferWithLength:sizeof(struct Uniforms) * QUAD_COUNT
 	                                     options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
@@ -101,11 +103,34 @@ struct Uniforms {
 	                        length:sizeof(edrMax)
 	                       atIndex:1];
 
-	struct Uniforms uniforms = {
-		.translation = simd_make_float4(0.25, 0.25, 0, 0),
-		.scale = simd_make_float4(0.5, 0.5, 1, 1),
+	struct Uniforms uniforms[QUAD_COUNT] = {
+		{
+		        .translation = simd_make_float4(0.25, -0.25, 0, 0),
+		        .scale = simd_make_float4(0.5, 0.5, 1, 1),
+		        .color = simd_make_float4(1, 0, 0, 1),
+		},
+		{
+		        .translation = simd_make_float4(0, 0, 0, 0),
+		        .scale = simd_make_float4(0.1, 0.1, 1, 1),
+		        .color = simd_make_float4(0, 1, 0, 1),
+		},
+		{
+		        .translation = simd_make_float4(-0.25, 0.25, 0, 0),
+		        .scale = simd_make_float4(0.2, 0.5, 1, 1),
+		        .color = simd_make_float4(0, 0, 1, 1),
+		},
+		{
+		        .translation = simd_make_float4(-0.5, -0.25, 0, 0),
+		        .scale = simd_make_float4(0.3, 0.3, 1, 1),
+		        .color = simd_make_float4(0, 1, 1, 1),
+		},
+		{
+		        .translation = simd_make_float4(0.2, 0.8, 0, 0),
+		        .scale = simd_make_float4(0.2, 0.1, 1, 1),
+		        .color = simd_make_float4(1, 0, 1, 1),
+		}
 	};
-	memcpy(uniformsBuffer.contents, &uniforms, sizeof(struct Uniforms));
+	memcpy(uniformsBuffer.contents, &uniforms, sizeof(uniforms));
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
 	                        atIndex:2];
@@ -115,7 +140,7 @@ struct Uniforms {
 	                            indexType:MTLIndexTypeUInt16
 	                          indexBuffer:indexBuffer
 	                    indexBufferOffset:0
-	                        instanceCount:1];
+	                        instanceCount:QUAD_COUNT];
 
 	[commandEncoder endEncoding];
 
