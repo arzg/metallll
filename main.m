@@ -12,7 +12,8 @@ struct Vertex {
 @interface MainView : MTKView {
 	id<MTLCommandQueue> commandQueue;
 	id<MTLRenderPipelineState> renderPipeline;
-	id<MTLBuffer> vertexArray;
+	id<MTLBuffer> vertexBuffer;
+	id<MTLBuffer> indexBuffer;
 }
 @end
 
@@ -29,13 +30,18 @@ struct Vertex {
 	self.layer.opaque = NO;
 	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
-	struct Vertex vertexArrayData[3] = {
-		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 100, 0, 0, 1 } },
-		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 100, 0, 1 } },
+	struct Vertex vertexBufferData[4] = {
+		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 100, 0, 0, 1 } },
+		{ .position = { -0.5, 0.5, 0, 1 }, .color = { 0, 100, 0, 1 } },
+		{ .position = { 0.5, 0.5, 0, 1 }, .color = { 0, 0, 100, 1 } },
 		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 100, 1 } }
 	};
-	vertexArray = [device newBufferWithBytes:vertexArrayData
-	                                  length:sizeof(vertexArrayData)
+	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
+	vertexBuffer = [device newBufferWithBytes:vertexBufferData
+	                                   length:sizeof(vertexBufferData)
+	                                  options:MTLResourceCPUCacheModeDefaultCache];
+	indexBuffer = [device newBufferWithBytes:indexBufferData
+	                                  length:sizeof(indexBufferData)
 	                                 options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
@@ -76,7 +82,7 @@ struct Vertex {
 	        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
 	[commandEncoder setRenderPipelineState:renderPipeline];
 
-	[commandEncoder setVertexBuffer:vertexArray
+	[commandEncoder setVertexBuffer:vertexBuffer
 	                         offset:0
 	                        atIndex:0];
 
@@ -85,9 +91,11 @@ struct Vertex {
 	                        length:sizeof(edrMax)
 	                       atIndex:1];
 
-	[commandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
-	                   vertexStart:0
-	                   vertexCount:3];
+	[commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+	                           indexCount:6
+	                            indexType:MTLIndexTypeUInt16
+	                          indexBuffer:indexBuffer
+	                    indexBufferOffset:0];
 
 	[commandEncoder endEncoding];
 
