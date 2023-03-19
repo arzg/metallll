@@ -31,10 +31,10 @@ struct Vertex {
 	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
 	struct Vertex vertexBufferData[4] = {
-		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 100, 0, 0, 1 } },
-		{ .position = { -0.5, 0.5, 0, 1 }, .color = { 0, 100, 0, 1 } },
-		{ .position = { 0.5, 0.5, 0, 1 }, .color = { 0, 0, 100, 1 } },
-		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 100, 1 } }
+		{ .position = { -1, -1, 0, 1 }, .color = { 1, 0, 0, 1 } },
+		{ .position = { -1, 1, 0, 1 }, .color = { 0, 1, 0, 1 } },
+		{ .position = { 1, 1, 0, 1 }, .color = { 0, 0, 1, 1 } },
+		{ .position = { 1, -1, 0, 1 }, .color = { 0, 0, 1, 1 } }
 	};
 	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	vertexBuffer = [device newBufferWithBytes:vertexBufferData
@@ -90,6 +90,16 @@ struct Vertex {
 	[commandEncoder setVertexBytes:&edrMax
 	                        length:sizeof(edrMax)
 	                       atIndex:1];
+
+	vector_float4 translation = simd_make_float4(0.25, 0.25, 0, 0);
+	[commandEncoder setVertexBytes:&translation
+	                        length:sizeof(translation)
+	                       atIndex:2];
+
+	vector_float4 scale = simd_make_float4(0.5, 0.5, 1, 1);
+	[commandEncoder setVertexBytes:&scale
+	                        length:sizeof(scale)
+	                       atIndex:3];
 
 	[commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
 	                           indexCount:6
