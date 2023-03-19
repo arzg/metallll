@@ -1,5 +1,5 @@
-#include <Cocoa/Cocoa.h>
-#include <Metal/Metal.h>
+#import <Cocoa/Cocoa.h>
+#import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 
 @interface MainView : NSView {
