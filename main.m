@@ -9,11 +9,17 @@ struct Vertex {
 	vector_float4 color;
 };
 
+struct Uniforms {
+	vector_float4 translation;
+	vector_float4 scale;
+};
+
 @interface MainView : MTKView {
 	id<MTLCommandQueue> commandQueue;
 	id<MTLRenderPipelineState> renderPipeline;
 	id<MTLBuffer> vertexBuffer;
 	id<MTLBuffer> indexBuffer;
+	id<MTLBuffer> uniformsBuffer;
 }
 @end
 
@@ -36,13 +42,17 @@ struct Vertex {
 		{ .position = { 1, 1, 0, 1 }, .color = { 0, 0, 1, 1 } },
 		{ .position = { 1, -1, 0, 1 }, .color = { 0, 0, 1, 1 } }
 	};
-	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	vertexBuffer = [device newBufferWithBytes:vertexBufferData
 	                                   length:sizeof(vertexBufferData)
 	                                  options:MTLResourceCPUCacheModeDefaultCache];
+
+	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	indexBuffer = [device newBufferWithBytes:indexBufferData
 	                                  length:sizeof(indexBufferData)
 	                                 options:MTLResourceCPUCacheModeDefaultCache];
+
+	uniformsBuffer = [device newBufferWithLength:sizeof(struct Uniforms)
+	                                     options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
 	NSURL* path = [NSURL fileURLWithPath:@"out/shaders.metallib" isDirectory:false];
@@ -91,21 +101,21 @@ struct Vertex {
 	                        length:sizeof(edrMax)
 	                       atIndex:1];
 
-	vector_float4 translation = simd_make_float4(0.25, 0.25, 0, 0);
-	[commandEncoder setVertexBytes:&translation
-	                        length:sizeof(translation)
-	                       atIndex:2];
-
-	vector_float4 scale = simd_make_float4(0.5, 0.5, 1, 1);
-	[commandEncoder setVertexBytes:&scale
-	                        length:sizeof(scale)
-	                       atIndex:3];
+	struct Uniforms uniforms = {
+		.translation = simd_make_float4(0.25, 0.25, 0, 0),
+		.scale = simd_make_float4(0.5, 0.5, 1, 1),
+	};
+	memcpy(uniformsBuffer.contents, &uniforms, sizeof(struct Uniforms));
+	[commandEncoder setVertexBuffer:uniformsBuffer
+	                         offset:0
+	                        atIndex:2];
 
 	[commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
 	                           indexCount:6
 	                            indexType:MTLIndexTypeUInt16
 	                          indexBuffer:indexBuffer
-	                    indexBufferOffset:0];
+	                    indexBufferOffset:0
+	                        instanceCount:1];
 
 	[commandEncoder endEncoding];
 
