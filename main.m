@@ -9,8 +9,8 @@ struct Vertex {
 };
 
 struct Uniforms {
-	vector_float4 translation;
-	vector_float4 scale;
+	vector_float2 position;
+	vector_float2 size;
 	vector_float4 color;
 };
 
@@ -98,42 +98,48 @@ struct Uniforms {
 	                         offset:0
 	                        atIndex:0];
 
-	float edrMax = self.window.screen.maximumExtendedDynamicRangeColorComponentValue;
-	[commandEncoder setVertexBytes:&edrMax
-	                        length:sizeof(edrMax)
-	                       atIndex:1];
-
 	struct Uniforms uniforms[QUAD_COUNT] = {
 		{
-		        .translation = simd_make_float4(0.25, -0.25, 0, 0),
-		        .scale = simd_make_float4(0.5, 0.5, 1, 1),
+		        .position = simd_make_float2(10, 10),
+		        .size = simd_make_float2(20, 20),
 		        .color = simd_make_float4(1, 0, 0, 1),
 		},
 		{
-		        .translation = simd_make_float4(0, 0, 0, 0),
-		        .scale = simd_make_float4(0.1, 0.1, 1, 1),
+		        .position = simd_make_float2(0, 0),
+		        .size = simd_make_float2(10, 10),
 		        .color = simd_make_float4(0, 1, 0, 1),
 		},
 		{
-		        .translation = simd_make_float4(-0.25, 0.25, 0, 0),
-		        .scale = simd_make_float4(0.2, 0.5, 1, 1),
+		        .position = simd_make_float2(100, 300),
+		        .size = simd_make_float2(20, 50),
 		        .color = simd_make_float4(0, 0, 1, 1),
 		},
 		{
-		        .translation = simd_make_float4(-0.5, -0.25, 0, 0),
-		        .scale = simd_make_float4(0.3, 0.3, 1, 1),
+		        .position = simd_make_float2(300, 20),
+		        .size = simd_make_float2(30, 30),
 		        .color = simd_make_float4(0, 1, 1, 1),
 		},
 		{
-		        .translation = simd_make_float4(0.2, 0.8, 0, 0),
-		        .scale = simd_make_float4(0.2, 0.1, 1, 1),
+		        .position = simd_make_float2(200, 400),
+		        .size = simd_make_float2(20, 10),
 		        .color = simd_make_float4(1, 0, 1, 1),
 		}
 	};
 	memcpy(uniformsBuffer.contents, &uniforms, sizeof(uniforms));
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
-	                        atIndex:2];
+	                        atIndex:1];
+
+	vector_uint2 viewportSize = simd_make_uint2(
+	        self.drawableSize.width, self.drawableSize.height);
+	[commandEncoder setVertexBytes:&viewportSize
+	                        length:sizeof(viewportSize)
+	                       atIndex:2];
+
+	float edrMax = self.window.screen.maximumExtendedDynamicRangeColorComponentValue;
+	[commandEncoder setVertexBytes:&edrMax
+	                        length:sizeof(edrMax)
+	                       atIndex:3];
 
 	[commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
 	                           indexCount:6
