@@ -1,3 +1,5 @@
+#include <metal_common>
+
 using namespace metal;
 
 struct Vertex {
@@ -12,11 +14,12 @@ struct VertexOut {
 
 vertex VertexOut vertexShader(
         const device Vertex* vertexArray [[buffer(0)]],
+        const device float* edrMax [[buffer(1)]],
         uint vid [[vertex_id]])
 {
 	VertexOut out;
 	out.position = vertexArray[vid].position;
-	out.color = vertexArray[vid].color;
+	out.color = clamp(vertexArray[vid].color, float4(0), float4(*edrMax));
 	return out;
 }
 

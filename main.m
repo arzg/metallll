@@ -30,9 +30,9 @@ struct Vertex {
 	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
 	struct Vertex vertexArrayData[3] = {
-		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 16, 0, 0, 1 } },
-		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 16, 0, 1 } },
-		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 16, 1 } }
+		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 100, 0, 0, 1 } },
+		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 100, 0, 1 } },
+		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 100, 1 } }
 	};
 	vertexArray = [device newBufferWithBytes:vertexArrayData
 	                                  length:sizeof(vertexArrayData)
@@ -75,12 +75,20 @@ struct Vertex {
 	id<MTLRenderCommandEncoder> commandEncoder =
 	        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
 	[commandEncoder setRenderPipelineState:renderPipeline];
+
 	[commandEncoder setVertexBuffer:vertexArray
 	                         offset:0
 	                        atIndex:0];
+
+	float edrMax = self.window.screen.maximumExtendedDynamicRangeColorComponentValue;
+	[commandEncoder setVertexBytes:&edrMax
+	                        length:sizeof(edrMax)
+	                       atIndex:1];
+
 	[commandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
 	                   vertexStart:0
 	                   vertexCount:3];
+
 	[commandEncoder endEncoding];
 
 	[commandBuffer presentDrawable:self.currentDrawable];
