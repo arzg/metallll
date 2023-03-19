@@ -1,6 +1,6 @@
 all: tidy out/metallll
 
-out/metallll: main.m
+out/metallll: main.m out/shaders.metallib
 	@ mkdir -p out
 	@ clang \
 		-O3 \
@@ -10,7 +10,11 @@ out/metallll: main.m
 		-framework Metal \
 		-framework MetalKit \
 		-o $@ \
-		$^
+		$<
+
+out/shaders.metallib: shaders.metal
+	@ mkdir -p out
+	@ xcrun -sdk macosx metal $^ -o $@
 
 tidy: main.m
 	@ clang-format -i $^

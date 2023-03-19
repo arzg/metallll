@@ -39,21 +39,10 @@ struct Vertex {
 	                                 options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
-
-	NSURL* path = [NSURL fileURLWithPath:@"shaders.metal" isDirectory:false];
-	NSString* shaders =
-	        [[NSString alloc] initWithContentsOfURL:path
-	                                       encoding:NSUTF8StringEncoding
-	                                          error:&error];
-	if (error != nil) {
-		NSLog(@"%@", error);
-		exit(1);
-	}
-
+	NSURL* path = [NSURL fileURLWithPath:@"out/shaders.metallib" isDirectory:false];
 	id<MTLLibrary> library =
-	        [device newLibraryWithSource:shaders
-	                             options:[[MTLCompileOptions alloc] init]
-	                               error:&error];
+	        [device newLibraryWithURL:path
+	                            error:&error];
 	if (error != nil) {
 		NSLog(@"%@", error);
 		exit(1);
