@@ -17,10 +17,10 @@ vertex VertexOut vertexShader(
         const device float* edrMax [[buffer(1)]],
         uint vid [[vertex_id]])
 {
-	VertexOut out;
-	out.position = vertexArray[vid].position;
-	out.color = clamp(vertexArray[vid].color, float4(0), float4(*edrMax));
-	return out;
+	return {
+		.position = vertexArray[vid].position,
+		.color = clamp(vertexArray[vid].color, float4(0), float4(*edrMax)),
+	};
 }
 
 fragment float4 fragmentShader(VertexOut interpolated [[stage_in]])
