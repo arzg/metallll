@@ -21,16 +21,18 @@ struct Vertex {
 - (id)initWithFrame:(CGRect)frame device:(id<MTLDevice>)device
 {
 	self = [super initWithFrame:frame device:device];
+	self.colorPixelFormat = MTLPixelFormatRGBA16Float;
 	self.sampleCount = 4;
 	self.clearColor = MTLClearColorMake(0, 0, 0, 0);
-	self.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceLinearSRGB);
+	self.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceLinearDisplayP3);
 	self.layer.backgroundColor = CGColorCreateSRGB(0, 0, 0, 0);
 	self.layer.opaque = NO;
+	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
 	struct Vertex vertexArrayData[3] = {
-		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 1, 0, 0, 1 } },
-		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 1, 0, 1 } },
-		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 1, 1 } }
+		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 16, 0, 0, 1 } },
+		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 16, 0, 1 } },
+		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 16, 1 } }
 	};
 	vertexArray = [device newBufferWithBytes:vertexArrayData
 	                                  length:sizeof(vertexArrayData)
