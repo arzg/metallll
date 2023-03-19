@@ -3,6 +3,8 @@ all: tidy out/metallll
 out/metallll: main.m
 	@ mkdir -p out
 	@ clang \
+		-O3 \
+		-flto \
 		-framework Cocoa \
 		-framework QuartzCore \
 		-framework Metal \

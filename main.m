@@ -1,12 +1,20 @@
 #import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
+#import <simd/simd.h>
+
+struct Vertex {
+	vector_float4 position;
+	vector_float4 color;
+};
 
 @interface MainView : NSView {
 	CVDisplayLinkRef displayLink;
 	id<MTLDevice> device;
 	CAMetalLayer* metalLayer;
 	id<MTLCommandQueue> commandQueue;
+	id<MTLRenderPipelineState> renderPipeline;
+	id<MTLBuffer> vertexArray;
 }
 @end
 
@@ -23,12 +31,76 @@
 
 	device = MTLCreateSystemDefaultDevice();
 	metalLayer.device = device;
+
+	struct Vertex vertexArrayData[3] = {
+		{ .position = { 0.0, 0.5, 0, 1 }, .color = { 1, 0, 0, 1 } },
+		{ .position = { -0.5, -0.5, 0, 1 }, .color = { 0, 1, 0, 1 } },
+		{ .position = { 0.5, -0.5, 0, 1 }, .color = { 0, 0, 1, 1 } }
+	};
+	vertexArray = [device newBufferWithBytes:vertexArrayData
+	                                  length:sizeof(vertexArrayData)
+	                                 options:MTLResourceCPUCacheModeDefaultCache];
+
+	NSError* error = nil;
+
+	NSURL* path = [NSURL fileURLWithPath:@"shaders.metal" isDirectory:false];
+	NSString* shaders =
+	        [[NSString alloc] initWithContentsOfURL:path
+	                                       encoding:NSUTF8StringEncoding
+	                                          error:&error];
+	if (error != nil) {
+		NSLog(@"%@", error);
+		exit(1);
+	}
+
+	id<MTLLibrary> library =
+	        [device newLibraryWithSource:shaders
+	                             options:[[MTLCompileOptions alloc] init]
+	                               error:&error];
+	if (error != nil) {
+		NSLog(@"%@", error);
+		exit(1);
+	}
+
+	MTLRenderPipelineDescriptor* desc =
+	        [[MTLRenderPipelineDescriptor alloc] init];
+	desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+	desc.vertexFunction = [library newFunctionWithName:@"vertexShader"];
+	desc.fragmentFunction = [library newFunctionWithName:@"fragmentShader"];
+
+	renderPipeline = [device newRenderPipelineStateWithDescriptor:desc
+	                                                        error:&error];
+	if (error != nil) {
+		NSLog(@"%@", error);
+		exit(1);
+	}
+
 	commandQueue = [device newCommandQueue];
 
 	CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
 	CVDisplayLinkSetOutputCallback(displayLink, displayLinkCallback, self);
 	CVDisplayLinkStart(displayLink);
 	return self;
+}
+
+- (void)setFrameSize:(NSSize)size
+{
+	[super setFrameSize:size];
+
+	CGFloat scaleFactor = self.window.screen.backingScaleFactor;
+	CGSize newSize = self.bounds.size;
+	newSize.width *= scaleFactor;
+	newSize.height *= scaleFactor;
+
+	if (newSize.width <= 0 || newSize.width <= 0) {
+		return;
+	}
+
+	if (newSize.width == metalLayer.drawableSize.width && newSize.height == metalLayer.drawableSize.height) {
+		return;
+	}
+
+	metalLayer.drawableSize = newSize;
 }
 
 static CVReturn displayLinkCallback(
@@ -50,17 +122,23 @@ static CVReturn displayLinkCallback(
 		id<CAMetalDrawable> drawable = [metalLayer nextDrawable];
 		id<MTLTexture> texture = drawable.texture;
 
-		MTLRenderPassDescriptor* renderPassDescriptor =
-		        [MTLRenderPassDescriptor renderPassDescriptor];
-		renderPassDescriptor.colorAttachments[0].texture = texture;
-		renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-		renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-		renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+		MTLRenderPassDescriptor* passDesc = [[MTLRenderPassDescriptor alloc] init];
+		passDesc.colorAttachments[0].texture = texture;
+		passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+		passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+		passDesc.colorAttachments[0].clearColor = MTLClearColorMake(0.3, 0.4, 0.5, 1);
 
 		id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
 		id<MTLRenderCommandEncoder> commandEncoder =
-		        [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
+		        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
+		[commandEncoder setRenderPipelineState:renderPipeline];
+		[commandEncoder setVertexBuffer:vertexArray
+		                         offset:0
+		                        atIndex:0];
+		[commandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
+		                   vertexStart:0
+		                   vertexCount:3];
 		[commandEncoder endEncoding];
 
 		[commandBuffer presentDrawable:drawable];
