@@ -11,8 +11,8 @@ struct VertexOut {
 };
 
 vertex VertexOut vertexShader(
-		const device Vertex* vertexArray [[buffer(0)]],
-		uint vid [[vertex_id]])
+        const device Vertex* vertexArray [[buffer(0)]],
+        uint vid [[vertex_id]])
 {
 	VertexOut out;
 	out.position = vertexArray[vid].position;

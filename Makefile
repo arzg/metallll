@@ -16,7 +16,7 @@ out/shaders.metallib: shaders.metal
 	@ mkdir -p out
 	@ xcrun -sdk macosx metal $^ -o $@
 
-tidy: main.m
+tidy: main.m shaders.metal
 	@ clang-format -i $^
 
 clean:
