@@ -8,6 +8,7 @@ out/metallll: main.m
 		-framework Cocoa \
 		-framework QuartzCore \
 		-framework Metal \
+		-framework MetalKit \
 		-o $@ \
 		$^
 
