@@ -4,14 +4,42 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
+#define kGlyphWidth 256
+#define kGlyphHeight 512
+
+void* fontGlyph()
+{
+	void* p = calloc(kGlyphWidth * kGlyphHeight, 1);
+	CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceLinearGray);
+	CGContextRef ctx = CGBitmapContextCreate(
+	        p,
+	        kGlyphWidth, kGlyphHeight, 8, kGlyphWidth,
+	        colorspace, kCGImageAlphaOnly);
+
+	CTFontRef font = (__bridge CTFontRef)
+	        [NSFont systemFontOfSize:kGlyphWidth * 2
+	                          weight:NSFontWeightRegular];
+
+	CGGlyph glyph;
+	uint16_t encoded = 'a';
+	CTFontGetGlyphsForCharacters(font, &encoded, &glyph, 1);
+
+	CGPoint position = { 0, CTFontGetDescent(font) };
+	CTFontDrawGlyphs(font, &glyph, &position, 1, ctx);
+
+	return p;
+}
+
 struct Vertex {
-	vector_float4 position;
+	vector_float2 position;
+	vector_float2 textureCoordinate;
 };
 
 struct Uniforms {
 	vector_float2 position;
 	vector_float2 size;
 	vector_float4 color;
+	bool isGlyph;
 };
 
 #define QUAD_COUNT 5
@@ -22,6 +50,7 @@ struct Uniforms {
 	id<MTLBuffer> vertexBuffer;
 	id<MTLBuffer> indexBuffer;
 	id<MTLBuffer> uniformsBuffer;
+	id<MTLTexture> texture;
 }
 @end
 
@@ -39,10 +68,10 @@ struct Uniforms {
 	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
 
 	struct Vertex vertexBufferData[4] = {
-		{ .position = { -1, -1, 0, 1 } },
-		{ .position = { -1, 1, 0, 1 } },
-		{ .position = { 1, 1, 0, 1 } },
-		{ .position = { 1, -1, 0, 1 } }
+		{ .position = { -1, -1 }, .textureCoordinate = { 0, 1 } },
+		{ .position = { -1, 1 }, .textureCoordinate = { 0, 0 } },
+		{ .position = { 1, 1 }, .textureCoordinate = { 1, 0 } },
+		{ .position = { 1, -1 }, .textureCoordinate = { 1, 1 } }
 	};
 	vertexBuffer = [device newBufferWithBytes:vertexBufferData
 	                                   length:sizeof(vertexBufferData)
@@ -57,6 +86,22 @@ struct Uniforms {
 	                                     options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
+
+	MTLTextureDescriptor* textureDesc
+	        = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatA8Unorm
+	                                                             width:kGlyphWidth
+	                                                            height:kGlyphHeight
+	                                                         mipmapped:NO];
+	texture = [device newTextureWithDescriptor:textureDesc];
+	MTLRegion region = {
+		.origin = { 0, 0, 0 },
+		.size = { kGlyphWidth, kGlyphHeight, 1 },
+	};
+	[texture replaceRegion:region
+	           mipmapLevel:0
+	             withBytes:fontGlyph()
+	           bytesPerRow:kGlyphWidth];
+
 	NSURL* path = [NSURL fileURLWithPath:@"out/shaders.metallib" isDirectory:false];
 	id<MTLLibrary> library =
 	        [device newLibraryWithURL:path
@@ -68,7 +113,18 @@ struct Uniforms {
 
 	MTLRenderPipelineDescriptor* desc =
 	        [[MTLRenderPipelineDescriptor alloc] init];
-	desc.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+
+	MTLRenderPipelineColorAttachmentDescriptor* framebufferAttachment
+	        = desc.colorAttachments[0];
+
+	framebufferAttachment.pixelFormat = self.colorPixelFormat;
+
+	framebufferAttachment.blendingEnabled = YES;
+	framebufferAttachment.sourceRGBBlendFactor = MTLBlendFactorOne;
+	framebufferAttachment.sourceAlphaBlendFactor = MTLBlendFactorOne;
+	framebufferAttachment.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+	framebufferAttachment.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
 	desc.vertexFunction = [library newFunctionWithName:@"vertexShader"];
 	desc.fragmentFunction = [library newFunctionWithName:@"fragmentShader"];
 
@@ -98,31 +154,65 @@ struct Uniforms {
 	                         offset:0
 	                        atIndex:0];
 
+	float factor = 1;
+	float padding = 100;
 	struct Uniforms uniforms[QUAD_COUNT] = {
 		{
-		        .position = simd_make_float2(10, 10),
-		        .size = simd_make_float2(20, 20),
-		        .color = simd_make_float4(1, 0, 0, 1),
+		        .position = { 0, 0 },
+		        .size = {
+		                self.drawableSize.width,
+		                self.drawableSize.height,
+		        },
+		        .color = { 0, 0, 0, 0.5 },
+		        .isGlyph = false,
 		},
 		{
-		        .position = simd_make_float2(0, 0),
-		        .size = simd_make_float2(10, 10),
-		        .color = simd_make_float4(0, 1, 0, 1),
+		        .position = {
+		                padding,
+		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		        },
+		        .size = {
+		                kGlyphWidth * factor,
+		                kGlyphHeight * factor,
+		        },
+		        .color = { 1, 0, 0, 0.1 },
+		        .isGlyph = false,
 		},
 		{
-		        .position = simd_make_float2(100, 300),
-		        .size = simd_make_float2(20, 50),
-		        .color = simd_make_float4(0, 0, 1, 1),
+		        .position = {
+		                padding,
+		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		        },
+		        .size = {
+		                kGlyphWidth * factor,
+		                kGlyphHeight * factor,
+		        },
+		        .color = { 1, 0, 0, 0.5 },
+		        .isGlyph = true,
 		},
 		{
-		        .position = simd_make_float2(300, 20),
-		        .size = simd_make_float2(30, 30),
-		        .color = simd_make_float4(0, 1, 1, 1),
+		        .position = {
+		                (self.drawableSize.width - kGlyphWidth * factor) / 2,
+		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		        },
+		        .size = {
+		                kGlyphWidth * factor,
+		                kGlyphHeight * factor,
+		        },
+		        .color = { 0, 1, 0, 0.5 },
+		        .isGlyph = true,
 		},
 		{
-		        .position = simd_make_float2(200, 400),
-		        .size = simd_make_float2(20, 10),
-		        .color = simd_make_float4(1, 0, 1, 1),
+		        .position = {
+		                self.drawableSize.width - kGlyphWidth * factor - padding,
+		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		        },
+		        .size = {
+		                kGlyphWidth * factor,
+		                kGlyphHeight * factor,
+		        },
+		        .color = { 0, 0, 1, 0.5 },
+		        .isGlyph = true,
 		}
 	};
 	memcpy(uniformsBuffer.contents, &uniforms, sizeof(uniforms));
@@ -140,6 +230,9 @@ struct Uniforms {
 	[commandEncoder setVertexBytes:&edrMax
 	                        length:sizeof(edrMax)
 	                       atIndex:3];
+
+	[commandEncoder setFragmentTexture:texture
+	                           atIndex:0];
 
 	[commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
 	                           indexCount:6
@@ -198,7 +291,7 @@ int main()
 		              keyEquivalent:@"q"];
 		[appMenu addItem:quitMenuItem];
 
-		NSRect rect = NSMakeRect(0, 0, 420, 69);
+		NSRect rect = NSMakeRect(100, 100, 500, 400);
 
 		NSWindow* window = [NSWindow alloc];
 		NSWindowStyleMask style = NSWindowStyleMaskTitled

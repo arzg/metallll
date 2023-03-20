@@ -1,20 +1,25 @@
 #include <metal_common>
+#include <metal_stdlib>
 
 using namespace metal;
 
 struct Vertex {
-	float4 position;
+	float2 position;
+	float2 textureCoordinate;
 };
 
 struct Uniforms {
 	float2 position;
 	float2 size;
 	float4 color;
+	bool isGlyph;
 };
 
 struct VertexOut {
 	float4 position [[position]];
+	float2 textureCoordinate;
 	float4 color;
+	bool isGlyph;
 };
 
 vertex VertexOut vertexShader(
@@ -35,7 +40,7 @@ vertex VertexOut vertexShader(
 	//      pixel space:   0 .. viewportSize, zero is top left, y goes down
 
 	float2 pixelSpaceFullScreenPosition
-	        = (v.position.xy * float2(1, -1) + 1) / 2 * viewportSize;
+	        = (v.position * float2(1, -1) + 1) / 2 * viewportSize;
 
 	float2 pixelSpacePosition
 	        = pixelSpaceFullScreenPosition * portionOfViewportCovered + u.position;
@@ -45,11 +50,22 @@ vertex VertexOut vertexShader(
 
 	return {
 		.position = float4(normalizedSpacePosition.xy, 0, 1),
-		.color = clamp(u.color, float4(0), float4(*edrMax)),
+		.textureCoordinate = v.textureCoordinate,
+		.color = clamp(u.color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
+		.isGlyph = u.isGlyph,
 	};
 }
 
-fragment float4 fragmentShader(VertexOut interpolated [[stage_in]])
+fragment float4 fragmentShader(VertexOut interpolated [[stage_in]],
+        texture2d<float> texture [[texture(0)]])
 {
-	return interpolated.color;
+	constexpr sampler textureSampler(mag_filter::nearest, min_filter::nearest);
+	float4 out = interpolated.color;
+	if (interpolated.isGlyph) {
+		float glyphCoverage
+		        = texture.sample(textureSampler, interpolated.textureCoordinate).a;
+		out.a *= glyphCoverage;
+	}
+	out.rgb *= out.a;
+	return out;
 }
