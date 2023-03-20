@@ -154,6 +154,28 @@ struct Uniforms {
 	[commandBuffer commit];
 }
 
+// We accept key events.
+- (BOOL)acceptsFirstResponder
+{
+	return YES;
+}
+
+// Forward raw key events to relevant methods
+// like insertText:, insertNewline, etc.
+- (void)keyDown:(NSEvent*)event
+{
+	[self interpretKeyEvents:[NSArray arrayWithObject:event]];
+}
+
+- (void)insertText:(id)s
+{
+	NSAssert(
+	        [s isKindOfClass:[NSString class]],
+	        @"insertText: was passed a class other than NSString");
+	NSString* string = s;
+	NSLog(@"string: “%@”", string);
+}
+
 @end
 
 int main()
