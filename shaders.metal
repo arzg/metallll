@@ -49,7 +49,7 @@ vertex VertexOut vertexShader(
 	        = (pixelSpacePosition / viewportSize * 2 - 1) * float2(1, -1);
 
 	return {
-		.position = float4(normalizedSpacePosition.xy, 0, 1),
+		.position = float4(normalizedSpacePosition, 0, 1),
 		.textureCoordinate = v.textureCoordinate,
 		.color = clamp(u.color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
 		.isGlyph = u.isGlyph,

@@ -4,6 +4,8 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
+#define kSampleCount 4
+
 #define kGlyphWidth 256
 #define kGlyphHeight 512
 
@@ -44,9 +46,16 @@ struct Uniforms {
 
 #define QUAD_COUNT 5
 
-@interface MainView : MTKView {
+@interface MainView : NSView {
+	CAMetalLayer* metalLayer;
+	CVDisplayLinkRef displayLink;
+	id<MTLDevice> device;
 	id<MTLCommandQueue> commandQueue;
 	id<MTLRenderPipelineState> renderPipeline;
+
+	MTLTextureDescriptor* multisampleTextureDesc;
+	id<MTLTexture> multisampleTexture;
+
 	id<MTLBuffer> vertexBuffer;
 	id<MTLBuffer> indexBuffer;
 	id<MTLBuffer> uniformsBuffer;
@@ -56,16 +65,26 @@ struct Uniforms {
 
 @implementation MainView
 
-- (id)initWithFrame:(CGRect)frame device:(id<MTLDevice>)device
+- (id)initWithFrame:(CGRect)frame
 {
-	self = [super initWithFrame:frame device:device];
-	self.colorPixelFormat = MTLPixelFormatRGBA16Float;
-	self.sampleCount = 4;
-	self.clearColor = MTLClearColorMake(0, 0, 0, 0);
-	self.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceLinearDisplayP3);
-	self.layer.backgroundColor = CGColorCreateSRGB(0, 0, 0, 0);
+	self = [super initWithFrame:frame];
+	self.wantsLayer = YES;
+	self.layer = [CAMetalLayer layer];
+	metalLayer = (CAMetalLayer*)self.layer;
+	device = MTLCreateSystemDefaultDevice();
+	metalLayer.device = device;
+
+	metalLayer.pixelFormat = MTLPixelFormatRGBA16Float;
+	metalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
+	metalLayer.wantsExtendedDynamicRangeContent = YES;
 	self.layer.opaque = NO;
-	((CAMetalLayer*)self.layer).wantsExtendedDynamicRangeContent = YES;
+
+	metalLayer.framebufferOnly = NO;
+
+	multisampleTextureDesc = [[MTLTextureDescriptor alloc] init];
+	multisampleTextureDesc.pixelFormat = metalLayer.pixelFormat;
+	multisampleTextureDesc.textureType = MTLTextureType2DMultisample;
+	multisampleTextureDesc.sampleCount = kSampleCount;
 
 	struct Vertex vertexBufferData[4] = {
 		{ .position = { -1, -1 }, .textureCoordinate = { 0, 1 } },
@@ -113,11 +132,12 @@ struct Uniforms {
 
 	MTLRenderPipelineDescriptor* desc =
 	        [[MTLRenderPipelineDescriptor alloc] init];
+	desc.rasterSampleCount = kSampleCount;
 
 	MTLRenderPipelineColorAttachmentDescriptor* framebufferAttachment
 	        = desc.colorAttachments[0];
 
-	framebufferAttachment.pixelFormat = self.colorPixelFormat;
+	framebufferAttachment.pixelFormat = metalLayer.pixelFormat;
 
 	framebufferAttachment.blendingEnabled = YES;
 	framebufferAttachment.sourceRGBBlendFactor = MTLBlendFactorOne;
@@ -137,14 +157,82 @@ struct Uniforms {
 
 	commandQueue = [device newCommandQueue];
 
+	CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
+	CVDisplayLinkSetOutputCallback(
+	        displayLink, displayLinkCallback, (__bridge void*)self);
+	CVDisplayLinkStart(displayLink);
+
+	NSNotificationCenter* notificationCenter = [NSNotificationCenter defaultCenter];
+	[notificationCenter addObserver:self
+	                       selector:@selector(windowWillClose:)
+	                           name:NSWindowWillCloseNotification
+	                         object:self.window];
+
 	return self;
 }
 
-- (void)drawRect:(NSRect)dirtyRect
+- (void)windowWillClose:(NSNotification*)notification
 {
+	if (notification.object == self.window)
+		CVDisplayLinkStop(displayLink);
+}
+
+- (void)viewDidChangeBackingProperties
+{
+	[super viewDidChangeBackingProperties];
+	[self updateDrawableSize];
+}
+
+- (void)setFrameSize:(NSSize)size
+{
+	[super setFrameSize:size];
+	[self updateDrawableSize];
+}
+
+- (void)updateDrawableSize
+{
+	NSSize size = self.bounds.size;
+	size.width *= self.window.screen.backingScaleFactor;
+	size.height *= self.window.screen.backingScaleFactor;
+	if (size.width == 0 && size.height == 0)
+		return;
+	metalLayer.drawableSize = size;
+
+	[self updateMultisampleTexture:size];
+}
+
+- (void)updateMultisampleTexture:(NSSize)size
+{
+	multisampleTextureDesc.width = size.width;
+	multisampleTextureDesc.height = size.height;
+	multisampleTexture
+	        = [device newTextureWithDescriptor:multisampleTextureDesc];
+}
+
+static CVReturn displayLinkCallback(
+        CVDisplayLinkRef displayLink,
+        const CVTimeStamp* now,
+        const CVTimeStamp* outputTime,
+        CVOptionFlags flagsIn,
+        CVOptionFlags* flagsOut,
+        void* displayLinkContext)
+{
+	MainView* view = (__bridge MainView*)displayLinkContext;
+	[view renderOneFrame];
+	return kCVReturnSuccess;
+}
+
+- (void)renderOneFrame
+{
+	id<CAMetalDrawable> drawable = [metalLayer nextDrawable];
 	id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
-	MTLRenderPassDescriptor* passDesc = self.currentRenderPassDescriptor;
+	MTLRenderPassDescriptor* passDesc = [[MTLRenderPassDescriptor alloc] init];
+	passDesc.colorAttachments[0].texture = multisampleTexture;
+	passDesc.colorAttachments[0].resolveTexture = drawable.texture;
+	passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+	passDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+	passDesc.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
 
 	id<MTLRenderCommandEncoder> commandEncoder =
 	        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
@@ -154,14 +242,16 @@ struct Uniforms {
 	                         offset:0
 	                        atIndex:0];
 
+	float width = metalLayer.drawableSize.width;
+	float height = metalLayer.drawableSize.height;
 	float factor = 1;
 	float padding = 100;
 	struct Uniforms uniforms[QUAD_COUNT] = {
 		{
 		        .position = { 0, 0 },
 		        .size = {
-		                self.drawableSize.width,
-		                self.drawableSize.height,
+		                width,
+		                height,
 		        },
 		        .color = { 0, 0, 0, 0.5 },
 		        .isGlyph = false,
@@ -169,7 +259,7 @@ struct Uniforms {
 		{
 		        .position = {
 		                padding,
-		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		                (height - kGlyphHeight * factor) / 2,
 		        },
 		        .size = {
 		                kGlyphWidth * factor,
@@ -181,7 +271,7 @@ struct Uniforms {
 		{
 		        .position = {
 		                padding,
-		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		                (height - kGlyphHeight * factor) / 2,
 		        },
 		        .size = {
 		                kGlyphWidth * factor,
@@ -192,8 +282,8 @@ struct Uniforms {
 		},
 		{
 		        .position = {
-		                (self.drawableSize.width - kGlyphWidth * factor) / 2,
-		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		                (width - kGlyphWidth * factor) / 2,
+		                (height - kGlyphHeight * factor) / 2,
 		        },
 		        .size = {
 		                kGlyphWidth * factor,
@@ -204,8 +294,8 @@ struct Uniforms {
 		},
 		{
 		        .position = {
-		                self.drawableSize.width - kGlyphWidth * factor - padding,
-		                (self.drawableSize.height - kGlyphHeight * factor) / 2,
+		                width - kGlyphWidth * factor - padding,
+		                (height - kGlyphHeight * factor) / 2,
 		        },
 		        .size = {
 		                kGlyphWidth * factor,
@@ -220,8 +310,7 @@ struct Uniforms {
 	                         offset:0
 	                        atIndex:1];
 
-	vector_uint2 viewportSize = simd_make_uint2(
-	        self.drawableSize.width, self.drawableSize.height);
+	vector_uint2 viewportSize = { width, height };
 	[commandEncoder setVertexBytes:&viewportSize
 	                        length:sizeof(viewportSize)
 	                       atIndex:2];
@@ -243,7 +332,7 @@ struct Uniforms {
 
 	[commandEncoder endEncoding];
 
-	[commandBuffer presentDrawable:self.currentDrawable];
+	[commandBuffer presentDrawable:drawable];
 	[commandBuffer commit];
 }
 
@@ -285,27 +374,24 @@ int main()
 
 		NSApp.mainMenu = menuBar;
 
-		NSMenuItem* quitMenuItem = [NSMenuItem alloc];
-		[quitMenuItem initWithTitle:@"Quit metallll"
-		                     action:@selector(terminate:)
-		              keyEquivalent:@"q"];
+		NSMenuItem* quitMenuItem
+		        = [[NSMenuItem alloc] initWithTitle:@"Quit metallll"
+		                                     action:@selector(terminate:)
+		                              keyEquivalent:@"q"];
 		[appMenu addItem:quitMenuItem];
 
 		NSRect rect = NSMakeRect(100, 100, 500, 400);
 
-		NSWindow* window = [NSWindow alloc];
 		NSWindowStyleMask style = NSWindowStyleMaskTitled
 		        | NSWindowStyleMaskResizable
 		        | NSWindowStyleMaskClosable;
-		[window
-		        initWithContentRect:rect
-		                  styleMask:style
-		                    backing:NSBackingStoreBuffered
-		                      defer:NO];
+		NSWindow* window
+		        = [[NSWindow alloc] initWithContentRect:rect
+		                                      styleMask:style
+		                                        backing:NSBackingStoreBuffered
+		                                          defer:NO];
 		window.title = @"metalllllllllll";
-		MainView* view = [MainView alloc];
-		[view initWithFrame:rect
-		             device:MTLCreateSystemDefaultDevice()];
+		MainView* view = [[MainView alloc] initWithFrame:rect];
 		window.contentView = view;
 
 		// Zero alpha results in no window shadow, so we use “almost zero”.

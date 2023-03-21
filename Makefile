@@ -3,6 +3,7 @@ all: tidy out/metallll
 out/metallll: main.m out/shaders.metallib
 	@ mkdir -p out
 	@ clang \
+		-fobjc-arc \
 		-O3 \
 		-flto \
 		-framework Cocoa \
