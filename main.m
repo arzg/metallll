@@ -112,10 +112,7 @@ struct Uniforms {
 	                                                            height:kGlyphHeight
 	                                                         mipmapped:NO];
 	texture = [device newTextureWithDescriptor:textureDesc];
-	MTLRegion region = {
-		.origin = { 0, 0, 0 },
-		.size = { kGlyphWidth, kGlyphHeight, 1 },
-	};
+	MTLRegion region = MTLRegionMake2D(0, 0, kGlyphWidth, kGlyphHeight);
 	[texture replaceRegion:region
 	           mipmapLevel:0
 	             withBytes:fontGlyph()
