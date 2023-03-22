@@ -32,11 +32,6 @@ void* fontGlyph()
 	return p;
 }
 
-struct Vertex {
-	vector_float2 position;
-	vector_float2 textureCoordinate;
-};
-
 struct Uniforms {
 	vector_float2 position;
 	vector_float2 size;
@@ -56,7 +51,6 @@ struct Uniforms {
 	MTLTextureDescriptor* multisampleTextureDesc;
 	id<MTLTexture> multisampleTexture;
 
-	id<MTLBuffer> vertexBuffer;
 	id<MTLBuffer> indexBuffer;
 	id<MTLBuffer> uniformsBuffer;
 	id<MTLTexture> texture;
@@ -85,16 +79,6 @@ struct Uniforms {
 	multisampleTextureDesc.pixelFormat = metalLayer.pixelFormat;
 	multisampleTextureDesc.textureType = MTLTextureType2DMultisample;
 	multisampleTextureDesc.sampleCount = kSampleCount;
-
-	struct Vertex vertexBufferData[4] = {
-		{ .position = { -1, -1 }, .textureCoordinate = { 0, 1 } },
-		{ .position = { -1, 1 }, .textureCoordinate = { 0, 0 } },
-		{ .position = { 1, 1 }, .textureCoordinate = { 1, 0 } },
-		{ .position = { 1, -1 }, .textureCoordinate = { 1, 1 } }
-	};
-	vertexBuffer = [device newBufferWithBytes:vertexBufferData
-	                                   length:sizeof(vertexBufferData)
-	                                  options:MTLResourceCPUCacheModeDefaultCache];
 
 	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	indexBuffer = [device newBufferWithBytes:indexBufferData
@@ -235,10 +219,6 @@ static CVReturn displayLinkCallback(
 	        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
 	[commandEncoder setRenderPipelineState:renderPipeline];
 
-	[commandEncoder setVertexBuffer:vertexBuffer
-	                         offset:0
-	                        atIndex:0];
-
 	float width = metalLayer.drawableSize.width;
 	float height = metalLayer.drawableSize.height;
 	float factor = 1;
@@ -305,17 +285,17 @@ static CVReturn displayLinkCallback(
 	memcpy(uniformsBuffer.contents, &uniforms, sizeof(uniforms));
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
-	                        atIndex:1];
+	                        atIndex:0];
 
 	vector_uint2 viewportSize = { width, height };
 	[commandEncoder setVertexBytes:&viewportSize
 	                        length:sizeof(viewportSize)
-	                       atIndex:2];
+	                       atIndex:1];
 
 	float edrMax = self.window.screen.maximumExtendedDynamicRangeColorComponentValue;
 	[commandEncoder setVertexBytes:&edrMax
 	                        length:sizeof(edrMax)
-	                       atIndex:3];
+	                       atIndex:2];
 
 	[commandEncoder setFragmentTexture:texture
 	                           atIndex:0];

@@ -3,11 +3,6 @@
 
 using namespace metal;
 
-struct Vertex {
-	float2 position;
-	float2 textureCoordinate;
-};
-
 struct Uniforms {
 	float2 position;
 	float2 size;
@@ -22,15 +17,27 @@ struct VertexOut {
 	bool isGlyph;
 };
 
+constant float2 quadPositions[4] = {
+	float2(-1, -1),
+	float2(-1, 1),
+	float2(1, 1),
+	float2(1, -1),
+};
+
+constant float2 quadTextureCoordinates[4] = {
+	float2(0, 1),
+	float2(0, 0),
+	float2(1, 0),
+	float2(1, 1),
+};
+
 vertex VertexOut vertexShader(
-        const device Vertex* vertexBuffer [[buffer(0)]],
-        const device Uniforms* uniformsBuffer [[buffer(1)]],
-        const device uint2* viewportSizePtr [[buffer(2)]],
-        const device float* edrMax [[buffer(3)]],
+        const device Uniforms* uniformsBuffer [[buffer(0)]],
+        const device uint2* viewportSizePtr [[buffer(1)]],
+        const device float* edrMax [[buffer(2)]],
         uint vid [[vertex_id]],
         uint iid [[instance_id]])
 {
-	Vertex v = vertexBuffer[vid];
 	Uniforms u = uniformsBuffer[iid];
 	float2 viewportSize = float2(*viewportSizePtr);
 
@@ -40,7 +47,7 @@ vertex VertexOut vertexShader(
 	//      pixel space:   0 .. viewportSize, zero is top left, y goes down
 
 	float2 pixelSpaceFullScreenPosition
-	        = (v.position * float2(1, -1) + 1) / 2 * viewportSize;
+	        = (quadPositions[vid] * float2(1, -1) + 1) / 2 * viewportSize;
 
 	float2 pixelSpacePosition
 	        = pixelSpaceFullScreenPosition * portionOfViewportCovered + u.position;
@@ -50,7 +57,7 @@ vertex VertexOut vertexShader(
 
 	return {
 		.position = float4(normalizedSpacePosition, 0, 1),
-		.textureCoordinate = v.textureCoordinate,
+		.textureCoordinate = quadTextureCoordinates[vid],
 		.color = clamp(u.color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
 		.isGlyph = u.isGlyph,
 	};
