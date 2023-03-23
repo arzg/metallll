@@ -6,6 +6,8 @@ using namespace metal;
 struct Uniforms {
 	float2 position;
 	float2 size;
+	ushort2 glyphTopLeft;
+	ushort2 glyphSize;
 	float4 color;
 	bool isGlyph;
 };
@@ -33,13 +35,14 @@ constant float2 quadTextureCoordinates[4] = {
 
 vertex VertexOut vertexShader(
         const device Uniforms* uniformsBuffer [[buffer(0)]],
-        const device uint2* viewportSizePtr [[buffer(1)]],
-        const device float* edrMax [[buffer(2)]],
+        const device uint2* viewportSizeInt [[buffer(1)]],
+        const device ushort2* atlasSize [[buffer(2)]],
+        const device float* edrMax [[buffer(3)]],
         uint vid [[vertex_id]],
         uint iid [[instance_id]])
 {
 	Uniforms u = uniformsBuffer[iid];
-	float2 viewportSize = float2(*viewportSizePtr);
+	float2 viewportSize = float2(*viewportSizeInt);
 
 	float2 portionOfViewportCovered = u.size / viewportSize;
 
@@ -55,9 +58,14 @@ vertex VertexOut vertexShader(
 	float2 normalizedSpacePosition
 	        = (pixelSpacePosition / viewportSize * 2 - 1) * float2(1, -1);
 
+	float2 textureCoordinate = quadTextureCoordinates[vid];
+	textureCoordinate *= float2(u.glyphSize);
+	textureCoordinate += float2(u.glyphTopLeft);
+	textureCoordinate /= float2(*atlasSize);
+
 	return {
 		.position = float4(normalizedSpacePosition, 0, 1),
-		.textureCoordinate = quadTextureCoordinates[vid],
+		.textureCoordinate = textureCoordinate,
 		.color = clamp(u.color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
 		.isGlyph = u.isGlyph,
 	};

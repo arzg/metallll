@@ -6,40 +6,82 @@
 
 #define kSampleCount 4
 
-#define kGlyphWidth 256
-#define kGlyphHeight 512
+struct FontAtlas {
+	void* pixels;
+	uint16_t width;
+	uint16_t height;
+	uint16_t* xPositions;
+	uint16_t* advances;
+};
 
-void* fontGlyph()
+struct FontAtlas fontGlyph()
 {
-	void* p = calloc(kGlyphWidth * kGlyphHeight, 1);
+	CTFontRef font = (__bridge CTFontRef)
+	        [NSFont systemFontOfSize:160
+	                          weight:NSFontWeightThin];
+
+	uint16_t encoded[26] = { 0 };
+	for (size_t i = 0; i < 26; i++)
+		encoded[i] = 'a' + i;
+
+	CGGlyph glyphs[26] = { 0 };
+	CTFontGetGlyphsForCharacters(font, encoded, glyphs, 26);
+
+	CGRect rects[26] = { 0 };
+	CTFontGetOpticalBoundsForGlyphs(font, glyphs, rects, 26, 0);
+
+	CGSize rawAdvances[26] = { 0 };
+	CTFontGetAdvancesForGlyphs(font, kCTFontOrientationDefault,
+	        glyphs, rawAdvances, 26);
+
+	uint16_t* advances = calloc(26, sizeof(uint16_t));
+	for (size_t i = 0; i < 26; i++)
+		advances[i] = ceil(rawAdvances[i].width) * 2;
+
+	uint16_t height = fmax(CTFontGetAscent(font), CTFontGetCapHeight(font))
+	        + CTFontGetDescent(font);
+
+	CGPoint positions[26] = { 0 };
+	uint16_t* xPositions = calloc(26, sizeof(uint16_t));
+	uint16_t currentAdvance = 0;
+	for (size_t i = 0; i < 26; i++) {
+		xPositions[i] = currentAdvance * 2;
+		positions[i] = (CGPoint) {
+			currentAdvance,
+			height - rects[i].origin.y - height,
+		};
+		currentAdvance += advances[i];
+	}
+
+	void* pixels = calloc(currentAdvance * 2 * height * 2, 1);
 	CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceLinearGray);
 	CGContextRef ctx = CGBitmapContextCreate(
-	        p,
-	        kGlyphWidth, kGlyphHeight, 8, kGlyphWidth,
+	        pixels,
+	        currentAdvance * 2, height * 2, 8, currentAdvance * 2,
 	        colorspace, kCGImageAlphaOnly);
+	CGContextScaleCTM(ctx, 2, 2);
 
-	CTFontRef font = (__bridge CTFontRef)
-	        [NSFont systemFontOfSize:kGlyphWidth * 2
-	                          weight:NSFontWeightRegular];
+	CTFontDrawGlyphs(font, glyphs, positions, 26, ctx);
 
-	CGGlyph glyph;
-	uint16_t encoded = 'a';
-	CTFontGetGlyphsForCharacters(font, &encoded, &glyph, 1);
-
-	CGPoint position = { 0, CTFontGetDescent(font) };
-	CTFontDrawGlyphs(font, &glyph, &position, 1, ctx);
-
-	return p;
+	return (struct FontAtlas) {
+		.pixels = pixels,
+		.width = currentAdvance * 2,
+		.height = height * 2,
+		.xPositions = xPositions,
+		.advances = advances,
+	};
 }
 
 struct Uniforms {
 	vector_float2 position;
 	vector_float2 size;
+	vector_ushort2 glyphTopLeft;
+	vector_ushort2 glyphSize;
 	vector_float4 color;
 	bool isGlyph;
 };
 
-#define QUAD_COUNT 5
+#define QUAD_COUNT 7
 
 @interface MainView : NSView {
 	CAMetalLayer* metalLayer;
@@ -54,6 +96,8 @@ struct Uniforms {
 	id<MTLBuffer> indexBuffer;
 	id<MTLBuffer> uniformsBuffer;
 	id<MTLTexture> texture;
+
+	struct FontAtlas atlas;
 }
 @end
 
@@ -90,17 +134,18 @@ struct Uniforms {
 
 	NSError* error = nil;
 
+	atlas = fontGlyph();
 	MTLTextureDescriptor* textureDesc
 	        = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatA8Unorm
-	                                                             width:kGlyphWidth
-	                                                            height:kGlyphHeight
+	                                                             width:atlas.width
+	                                                            height:atlas.height
 	                                                         mipmapped:NO];
 	texture = [device newTextureWithDescriptor:textureDesc];
-	MTLRegion region = MTLRegionMake2D(0, 0, kGlyphWidth, kGlyphHeight);
+	MTLRegion region = MTLRegionMake2D(0, 0, atlas.width, atlas.height);
 	[texture replaceRegion:region
 	           mipmapLevel:0
-	             withBytes:fontGlyph()
-	           bytesPerRow:kGlyphWidth];
+	             withBytes:atlas.pixels
+	           bytesPerRow:atlas.width];
 
 	NSURL* path = [NSURL fileURLWithPath:@"out/shaders.metallib" isDirectory:false];
 	id<MTLLibrary> library =
@@ -236,11 +281,11 @@ static CVReturn displayLinkCallback(
 		{
 		        .position = {
 		                padding,
-		                (height - kGlyphHeight * factor) / 2,
+		                (height - atlas.height * factor) / 2,
 		        },
 		        .size = {
-		                kGlyphWidth * factor,
-		                kGlyphHeight * factor,
+		                atlas.advances[0] * factor,
+		                atlas.height * factor,
 		        },
 		        .color = { 1, 0, 0, 0.1 },
 		        .isGlyph = false,
@@ -248,37 +293,67 @@ static CVReturn displayLinkCallback(
 		{
 		        .position = {
 		                padding,
-		                (height - kGlyphHeight * factor) / 2,
+		                (height - atlas.height * factor) / 2,
 		        },
 		        .size = {
-		                kGlyphWidth * factor,
-		                kGlyphHeight * factor,
+		                atlas.advances[0] * factor,
+		                atlas.height * factor,
 		        },
 		        .color = { 1, 0, 0, 0.5 },
+		        .glyphTopLeft = { atlas.xPositions[0], 0 },
+		        .glyphSize = { atlas.advances[0], atlas.height },
 		        .isGlyph = true,
 		},
 		{
 		        .position = {
-		                (width - kGlyphWidth * factor) / 2,
-		                (height - kGlyphHeight * factor) / 2,
+		                (width - atlas.advances[1] * factor) / 2,
+		                (height - atlas.height * factor) / 2,
 		        },
 		        .size = {
-		                kGlyphWidth * factor,
-		                kGlyphHeight * factor,
+		                atlas.advances[1] * factor,
+		                atlas.height * factor,
+		        },
+		        .color = { 0, 1, 0, 0.1 },
+		        .isGlyph = false,
+		},
+		{
+		        .position = {
+		                (width - atlas.advances[1] * factor) / 2,
+		                (height - atlas.height * factor) / 2,
+		        },
+		        .size = {
+		                atlas.advances[1] * factor,
+		                atlas.height * factor,
 		        },
 		        .color = { 0, 1, 0, 0.5 },
+		        .glyphTopLeft = { atlas.xPositions[1], 0 },
+		        .glyphSize = { atlas.advances[1], atlas.height },
 		        .isGlyph = true,
 		},
 		{
 		        .position = {
-		                width - kGlyphWidth * factor - padding,
-		                (height - kGlyphHeight * factor) / 2,
+		                width - atlas.advances[2] * factor - padding,
+		                (height - atlas.height * factor) / 2,
 		        },
 		        .size = {
-		                kGlyphWidth * factor,
-		                kGlyphHeight * factor,
+		                atlas.advances[2] * factor,
+		                atlas.height * factor,
+		        },
+		        .color = { 0, 0, 1, 0.1 },
+		        .isGlyph = false,
+		},
+		{
+		        .position = {
+		                width - atlas.advances[2] * factor - padding,
+		                (height - atlas.height * factor) / 2,
+		        },
+		        .size = {
+		                atlas.advances[2] * factor,
+		                atlas.height * factor,
 		        },
 		        .color = { 0, 0, 1, 0.5 },
+		        .glyphTopLeft = { atlas.xPositions[2], 0 },
+		        .glyphSize = { atlas.advances[2], atlas.height },
 		        .isGlyph = true,
 		}
 	};
@@ -292,10 +367,15 @@ static CVReturn displayLinkCallback(
 	                        length:sizeof(viewportSize)
 	                       atIndex:1];
 
+	vector_ushort2 atlasSize = { atlas.width, atlas.height };
+	[commandEncoder setVertexBytes:&atlasSize
+	                        length:sizeof(atlasSize)
+	                       atIndex:2];
+
 	float edrMax = self.window.screen.maximumExtendedDynamicRangeColorComponentValue;
 	[commandEncoder setVertexBytes:&edrMax
 	                        length:sizeof(edrMax)
-	                       atIndex:2];
+	                       atIndex:3];
 
 	[commandEncoder setFragmentTexture:texture
 	                           atIndex:0];
