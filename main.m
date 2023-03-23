@@ -5,6 +5,7 @@
 #import <simd/simd.h>
 
 #define kSampleCount 4
+#define kMaxQuadCount 1024
 
 struct FontAtlas {
 	void* pixels;
@@ -81,7 +82,49 @@ struct Uniforms {
 	bool isGlyph;
 };
 
-#define QUAD_COUNT 7
+struct GeometryBuilder {
+	struct Uniforms* ptr;
+	size_t count;
+};
+
+struct GeometryBuilder GeometryBuilderCreate(id<MTLBuffer> uniformsBuffer)
+{
+	return (struct GeometryBuilder) {
+		.ptr = uniformsBuffer.contents,
+		.count = 0,
+	};
+}
+
+void GeometryBuilderPush(struct GeometryBuilder* gb, struct Uniforms* uniforms)
+{
+	gb->ptr[gb->count] = *uniforms;
+	gb->count++;
+	assert(gb->count < kMaxQuadCount);
+}
+
+void GeometryBuilderPushRect(struct GeometryBuilder* gb, vector_float2 position, vector_float2 size, vector_float4 color)
+{
+	GeometryBuilderPush(gb,
+	        &(struct Uniforms) {
+	                .position = position,
+	                .size = size,
+	                .color = color,
+	                .isGlyph = false,
+	        });
+}
+
+void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas* atlas, uint8_t index, vector_float2 position, vector_float4 color)
+{
+	GeometryBuilderPush(gb,
+	        &(struct Uniforms) {
+	                .position = position,
+	                .size = { atlas->advances[index], atlas->height },
+	                .color = color,
+	                .glyphTopLeft = { atlas->xPositions[index], 0 },
+	                .glyphSize = { atlas->advances[index], atlas->height },
+	                .isGlyph = true,
+	        });
+}
 
 @interface MainView : NSView {
 	CAMetalLayer* metalLayer;
@@ -129,7 +172,7 @@ struct Uniforms {
 	                                  length:sizeof(indexBufferData)
 	                                 options:MTLResourceCPUCacheModeDefaultCache];
 
-	uniformsBuffer = [device newBufferWithLength:sizeof(struct Uniforms) * QUAD_COUNT
+	uniformsBuffer = [device newBufferWithLength:sizeof(struct Uniforms) * kMaxQuadCount
 	                                     options:MTLResourceCPUCacheModeDefaultCache];
 
 	NSError* error = nil;
@@ -268,96 +311,32 @@ static CVReturn displayLinkCallback(
 	float height = metalLayer.drawableSize.height;
 	float factor = 1;
 	float padding = 100;
-	struct Uniforms uniforms[QUAD_COUNT] = {
-		{
-		        .position = { 0, 0 },
-		        .size = {
-		                width,
-		                height,
-		        },
-		        .color = { 0, 0, 0, 0.5 },
-		        .isGlyph = false,
-		},
-		{
-		        .position = {
-		                padding,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[0] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 1, 0, 0, 0.1 },
-		        .isGlyph = false,
-		},
-		{
-		        .position = {
-		                padding,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[0] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 1, 0, 0, 0.5 },
-		        .glyphTopLeft = { atlas.xPositions[0], 0 },
-		        .glyphSize = { atlas.advances[0], atlas.height },
-		        .isGlyph = true,
-		},
-		{
-		        .position = {
-		                (width - atlas.advances[1] * factor) / 2,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[1] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 0, 1, 0, 0.1 },
-		        .isGlyph = false,
-		},
-		{
-		        .position = {
-		                (width - atlas.advances[1] * factor) / 2,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[1] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 0, 1, 0, 0.5 },
-		        .glyphTopLeft = { atlas.xPositions[1], 0 },
-		        .glyphSize = { atlas.advances[1], atlas.height },
-		        .isGlyph = true,
-		},
-		{
-		        .position = {
-		                width - atlas.advances[2] * factor - padding,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[2] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 0, 0, 1, 0.1 },
-		        .isGlyph = false,
-		},
-		{
-		        .position = {
-		                width - atlas.advances[2] * factor - padding,
-		                (height - atlas.height * factor) / 2,
-		        },
-		        .size = {
-		                atlas.advances[2] * factor,
-		                atlas.height * factor,
-		        },
-		        .color = { 0, 0, 1, 0.5 },
-		        .glyphTopLeft = { atlas.xPositions[2], 0 },
-		        .glyphSize = { atlas.advances[2], atlas.height },
-		        .isGlyph = true,
-		}
-	};
-	memcpy(uniformsBuffer.contents, &uniforms, sizeof(uniforms));
+
+	struct GeometryBuilder gb = GeometryBuilderCreate(uniformsBuffer);
+	GeometryBuilderPushRect(&gb,
+	        simd_make_float2(0, 0),
+	        simd_make_float2(width, height),
+	        simd_make_float4(0, 0, 0, 0.5));
+	GeometryBuilderPushGlyph(&gb,
+	        &atlas,
+	        0,
+	        simd_make_float2(padding, (height - atlas.height) / 2),
+	        simd_make_float4(1, 0, 0, 0.5));
+	GeometryBuilderPushGlyph(&gb,
+	        &atlas,
+	        1,
+	        simd_make_float2(
+	                (width - atlas.advances[1] * factor) / 2,
+	                (height - atlas.height * factor) / 2),
+	        simd_make_float4(0, 1, 0, 0.5));
+	GeometryBuilderPushGlyph(&gb,
+	        &atlas,
+	        2,
+	        simd_make_float2(
+	                width - atlas.advances[2] * factor - padding,
+	                (height - atlas.height * factor) / 2),
+	        simd_make_float4(0, 0, 1, 0.5));
+
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
 	                        atIndex:0];
@@ -385,7 +364,7 @@ static CVReturn displayLinkCallback(
 	                            indexType:MTLIndexTypeUInt16
 	                          indexBuffer:indexBuffer
 	                    indexBufferOffset:0
-	                        instanceCount:QUAD_COUNT];
+	                        instanceCount:gb.count];
 
 	[commandEncoder endEncoding];
 
