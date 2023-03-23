@@ -19,7 +19,7 @@ struct FontAtlas fontGlyph()
 {
 	CTFontRef font = (__bridge CTFontRef)
 	        [NSFont systemFontOfSize:80
-	                          weight:NSFontWeightThin];
+	                          weight:NSFontWeightBlack];
 
 	uint16_t encoded[26] = { 0 };
 	for (size_t i = 0; i < 26; i++)
@@ -317,7 +317,7 @@ static CVReturn displayLinkCallback(
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, height),
-	        simd_make_float4(0, 0, 0, 0.5));
+	        simd_make_float4(0.03, 0.03, 0.03, 0.95));
 
 	char* s = "loremipsumdolorsitamet";
 	float x = 0;
@@ -327,7 +327,7 @@ static CVReturn displayLinkCallback(
 		        &atlas,
 		        index,
 		        simd_make_float2(padding + x, padding),
-		        simd_make_float4(1, 1, 1, 0.5));
+		        simd_make_float4(0.7, 0.7, 0.7, 1));
 		x += atlas.advances[index];
 		s++;
 	}
