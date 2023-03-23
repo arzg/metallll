@@ -18,7 +18,7 @@ struct FontAtlas {
 struct FontAtlas fontGlyph()
 {
 	CTFontRef font = (__bridge CTFontRef)
-	        [NSFont systemFontOfSize:160
+	        [NSFont systemFontOfSize:80
 	                          weight:NSFontWeightThin];
 
 	uint16_t encoded[26] = { 0 };
@@ -313,29 +313,24 @@ static CVReturn displayLinkCallback(
 	float padding = 100;
 
 	struct GeometryBuilder gb = GeometryBuilderCreate(uniformsBuffer);
+
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, height),
 	        simd_make_float4(0, 0, 0, 0.5));
-	GeometryBuilderPushGlyph(&gb,
-	        &atlas,
-	        0,
-	        simd_make_float2(padding, (height - atlas.height) / 2),
-	        simd_make_float4(1, 0, 0, 0.5));
-	GeometryBuilderPushGlyph(&gb,
-	        &atlas,
-	        1,
-	        simd_make_float2(
-	                (width - atlas.advances[1] * factor) / 2,
-	                (height - atlas.height * factor) / 2),
-	        simd_make_float4(0, 1, 0, 0.5));
-	GeometryBuilderPushGlyph(&gb,
-	        &atlas,
-	        2,
-	        simd_make_float2(
-	                width - atlas.advances[2] * factor - padding,
-	                (height - atlas.height * factor) / 2),
-	        simd_make_float4(0, 0, 1, 0.5));
+
+	char* s = "loremipsumdolorsitamet";
+	float x = 0;
+	while (*s) {
+		uint8_t index = *s - 'a';
+		GeometryBuilderPushGlyph(&gb,
+		        &atlas,
+		        index,
+		        simd_make_float2(padding + x, padding),
+		        simd_make_float4(1, 1, 1, 0.5));
+		x += atlas.advances[index];
+		s++;
+	}
 
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
