@@ -13,6 +13,7 @@ struct FontAtlas {
 	uint16_t height;
 	uint16_t* xPositions;
 	uint16_t* advances;
+	uint16_t spaceAdvance;
 };
 
 struct FontAtlas fontGlyph()
@@ -64,12 +65,20 @@ struct FontAtlas fontGlyph()
 
 	CTFontDrawGlyphs(font, glyphs, positions, 26, ctx);
 
+	CGGlyph glyph = { 0 };
+	uint16_t space = ' ';
+	CGSize spaceAdvance = { 0 };
+	CTFontGetGlyphsForCharacters(font, &space, &glyph, 1);
+	CTFontGetAdvancesForGlyphs(font, kCTFontOrientationDefault,
+	        &glyph, &spaceAdvance, 1);
+
 	return (struct FontAtlas) {
 		.pixels = pixels,
 		.width = currentAdvance * 2,
 		.height = height * 2,
 		.xPositions = xPositions,
 		.advances = advances,
+		.spaceAdvance = ceil(spaceAdvance.width) * 2,
 	};
 }
 
@@ -319,17 +328,26 @@ static CVReturn displayLinkCallback(
 	        simd_make_float2(width, height),
 	        simd_make_float4(0.03, 0.03, 0.03, 0.95));
 
-	char* s = "loremipsumdolorsitamet";
-	float x = 0;
-	while (*s) {
+	char* s = "lorem ipsum\ndolor sit amet";
+	float x = padding;
+	float y = padding;
+	for (; *s; s++) {
+		if (*s == '\n') {
+			x = padding;
+			y += atlas.height;
+			continue;
+		}
+		if (*s == ' ') {
+			x += atlas.spaceAdvance;
+			continue;
+		}
 		uint8_t index = *s - 'a';
 		GeometryBuilderPushGlyph(&gb,
 		        &atlas,
 		        index,
-		        simd_make_float2(padding + x, padding),
+		        simd_make_float2(x, y),
 		        simd_make_float4(0.7, 0.7, 0.7, 1));
 		x += atlas.advances[index];
-		s++;
 	}
 
 	[commandEncoder setVertexBuffer:uniformsBuffer
