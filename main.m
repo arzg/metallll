@@ -6,6 +6,7 @@
 
 #define kSampleCount 4
 #define kMaxQuadCount 1024
+#define kTitlebarHeight 76
 
 struct FontAtlas {
 	void* pixels;
@@ -352,12 +353,12 @@ static CVReturn displayLinkCallback(
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
-	        simd_make_float2(width, 76),
+	        simd_make_float2(width, kTitlebarHeight),
 	        simd_make_float4(0.1, 0.1, 0.1, trafficLightAlpha),
 	        simd_make_float4(0.05, 0.05, 0.05, trafficLightAlpha));
 
 	GeometryBuilderPushRect(&gb,
-	        simd_make_float2(0, 76),
+	        simd_make_float2(0, kTitlebarHeight),
 	        simd_make_float2(width, 2),
 	        simd_make_float4(0, 0, 0, trafficLightAlpha),
 	        simd_make_float4(0, 0, 0, trafficLightAlpha));
@@ -375,7 +376,7 @@ static CVReturn displayLinkCallback(
 	}
 
 	float x = (width - textWidth) / 2;
-	float y = 20;
+	float y = (kTitlebarHeight - atlas.height) / 2;
 	for (int i = 0; i < [s length]; i++) {
 		char c = [s characterAtIndex:i];
 		if (c == ' ') {
@@ -444,7 +445,7 @@ static CVReturn displayLinkCallback(
 	CGFloat buttonHeight = [close frame].size.height;
 
 	CGFloat insetX = 12;
-	CGFloat insetY = 11;
+	CGFloat insetY = (kTitlebarHeight / self.window.screen.backingScaleFactor - buttonHeight) / 2;
 	CGFloat gap = [miniaturize frame].origin.x
 	        - [close frame].origin.x
 	        - buttonWidth;
@@ -504,7 +505,7 @@ static CVReturn displayLinkCallback(
 	loc.y = self.bounds.size.height - loc.y;
 	loc.x *= self.window.screen.backingScaleFactor;
 	loc.y *= self.window.screen.backingScaleFactor;
-	if (loc.y < 76)
+	if (loc.y < kTitlebarHeight)
 		[self.window performWindowDragWithEvent:event];
 }
 
@@ -520,7 +521,7 @@ static CVReturn displayLinkCallback(
 	loc.x *= self.window.screen.backingScaleFactor;
 	loc.y *= self.window.screen.backingScaleFactor;
 
-	if (loc.y < 76)
+	if (loc.y < kTitlebarHeight)
 		trafficLightAlphaD = 0.08;
 	else
 		trafficLightAlphaD = -0.03;
