@@ -150,6 +150,10 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	id<MTLTexture> texture;
 
 	struct FontAtlas atlas;
+	float trafficLightAlpha;
+	float trafficLightAlphaD;
+	simd_float4 buttonColor;
+	bool isMouseDown;
 }
 @end
 
@@ -235,6 +239,11 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 	commandQueue = [device newCommandQueue];
 
+	trafficLightAlpha = 0;
+	trafficLightAlphaD = 0;
+	buttonColor = simd_make_float4(0.5, 0.5, 0.5, 1);
+	isMouseDown = false;
+
 	CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
 	CVDisplayLinkSetOutputCallback(
 	        displayLink, displayLinkCallback, (__bridge void*)self);
@@ -277,6 +286,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	metalLayer.drawableSize = size;
 
 	[self updateMultisampleTexture:size];
+	[self updateTrafficLights];
 }
 
 - (void)updateMultisampleTexture:(NSSize)size
@@ -302,6 +312,10 @@ static CVReturn displayLinkCallback(
 
 - (void)renderOneFrame
 {
+	dispatch_async(dispatch_get_main_queue(), ^{
+	    [self updateTrafficLights];
+	});
+
 	id<CAMetalDrawable> drawable = [metalLayer nextDrawable];
 	id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
@@ -350,6 +364,11 @@ static CVReturn displayLinkCallback(
 		x += atlas.advances[index];
 	}
 
+	GeometryBuilderPushRect(&gb,
+	        simd_make_float2(500, 50),
+	        simd_make_float2(100, 200),
+	        buttonColor);
+
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
 	                        atIndex:0];
@@ -385,6 +404,38 @@ static CVReturn displayLinkCallback(
 	[commandBuffer commit];
 }
 
+- (void)updateTrafficLights
+{
+	NSButton* close = [self.window standardWindowButton:NSWindowCloseButton];
+	NSButton* miniaturize = [self.window standardWindowButton:NSWindowMiniaturizeButton];
+	NSButton* zoom = [self.window standardWindowButton:NSWindowZoomButton];
+
+	trafficLightAlpha += trafficLightAlphaD;
+	trafficLightAlpha = fmin(fmax(trafficLightAlpha, 0), 1);
+	close.alphaValue = trafficLightAlpha;
+	miniaturize.alphaValue = trafficLightAlpha;
+	zoom.alphaValue = trafficLightAlpha;
+
+	NSView* titlebar = [[close superview] superview];
+	CGFloat titlebarHeight = [titlebar frame].size.height;
+	CGFloat buttonWidth = [close frame].size.width;
+	CGFloat buttonHeight = [close frame].size.height;
+
+	CGFloat insetX = 12;
+	CGFloat insetY = 11;
+	CGFloat gap = [miniaturize frame].origin.x
+	        - [close frame].origin.x
+	        - buttonWidth;
+
+	CGFloat x = insetX;
+	CGFloat y = titlebarHeight - buttonHeight - insetY;
+	close.frameOrigin = NSMakePoint(x, y);
+	x += buttonWidth + gap;
+	miniaturize.frameOrigin = NSMakePoint(x, y);
+	x += buttonWidth + gap;
+	zoom.frameOrigin = NSMakePoint(x, y);
+}
+
 // We accept key events.
 - (BOOL)acceptsFirstResponder
 {
@@ -405,6 +456,62 @@ static CVReturn displayLinkCallback(
 	        @"insertText: was passed a class other than NSString");
 	NSString* string = s;
 	NSLog(@"string: “%@”", string);
+}
+
+- (void)mouseMoved:(NSEvent*)event
+{
+	[self updateMouseState:event];
+}
+
+- (void)mouseDown:(NSEvent*)event
+{
+	isMouseDown = true;
+	[self updateMouseState:event];
+}
+
+- (void)mouseUp:(NSEvent*)event
+{
+	isMouseDown = false;
+	[self updateMouseState:event];
+}
+
+- (void)mouseDragged:(NSEvent*)event
+{
+	[self updateMouseState:event];
+}
+
+- (void)mouseExited:(NSEvent*)event
+{
+	trafficLightAlphaD = -0.01;
+}
+
+- (void)updateMouseState:(NSEvent*)event
+{
+	NSPoint loc = event.locationInWindow;
+	loc.y = self.bounds.size.height - loc.y;
+	if (loc.y < 30)
+		trafficLightAlphaD = 0.08;
+	else
+		trafficLightAlphaD = -0.01;
+
+	loc.x *= self.window.screen.backingScaleFactor;
+	loc.y *= self.window.screen.backingScaleFactor;
+
+	if (loc.x > 500 && loc.x < 600 && loc.y > 50 && loc.y < 250 && isMouseDown)
+		buttonColor = simd_make_float4(0.4, 0.4, 0.4, 1);
+	else
+		buttonColor = simd_make_float4(0.5, 0.5, 0.5, 1);
+}
+
+- (void)updateTrackingAreas
+{
+	NSTrackingAreaOptions options = NSTrackingActiveAlways
+	        | NSTrackingMouseMoved
+	        | NSTrackingMouseEnteredAndExited;
+	[self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds
+	                                                   options:options
+	                                                     owner:self
+	                                                  userInfo:nil]];
 }
 
 @end
@@ -433,13 +540,17 @@ int main()
 
 		NSWindowStyleMask style = NSWindowStyleMaskTitled
 		        | NSWindowStyleMaskResizable
-		        | NSWindowStyleMaskClosable;
+		        | NSWindowStyleMaskClosable
+		        | NSWindowStyleMaskFullSizeContentView;
 		NSWindow* window
 		        = [[NSWindow alloc] initWithContentRect:rect
 		                                      styleMask:style
 		                                        backing:NSBackingStoreBuffered
 		                                          defer:NO];
 		window.title = @"metalllllllllll";
+		window.titleVisibility = NSWindowTitleHidden;
+		window.titlebarAppearsTransparent = YES;
+
 		MainView* view = [[MainView alloc] initWithFrame:rect];
 		window.contentView = view;
 
