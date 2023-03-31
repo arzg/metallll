@@ -8,7 +8,8 @@ struct Uniforms {
 	float2 size;
 	ushort2 glyphTopLeft;
 	ushort2 glyphSize;
-	float4 color;
+	float4 topColor;
+	float4 bottomColor;
 	bool isGlyph;
 };
 
@@ -63,10 +64,12 @@ vertex VertexOut vertexShader(
 	textureCoordinate += float2(u.glyphTopLeft);
 	textureCoordinate /= float2(*atlasSize);
 
+	float4 color = normalizedSpacePosition.y == 1 ? u.topColor : u.bottomColor;
+
 	return {
 		.position = float4(normalizedSpacePosition, 0, 1),
 		.textureCoordinate = textureCoordinate,
-		.color = clamp(u.color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
+		.color = clamp(color, float4(0), float4(*edrMax, *edrMax, *edrMax, 1)),
 		.isGlyph = u.isGlyph,
 	};
 }

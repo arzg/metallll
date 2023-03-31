@@ -87,7 +87,8 @@ struct Uniforms {
 	vector_float2 size;
 	vector_ushort2 glyphTopLeft;
 	vector_ushort2 glyphSize;
-	vector_float4 color;
+	vector_float4 topColor;
+	vector_float4 bottomColor;
 	bool isGlyph;
 };
 
@@ -111,13 +112,14 @@ void GeometryBuilderPush(struct GeometryBuilder* gb, struct Uniforms* uniforms)
 	assert(gb->count < kMaxQuadCount);
 }
 
-void GeometryBuilderPushRect(struct GeometryBuilder* gb, vector_float2 position, vector_float2 size, vector_float4 color)
+void GeometryBuilderPushRect(struct GeometryBuilder* gb, vector_float2 position, vector_float2 size, vector_float4 topColor, vector_float4 bottomColor)
 {
 	GeometryBuilderPush(gb,
 	        &(struct Uniforms) {
 	                .position = position,
 	                .size = size,
-	                .color = color,
+	                .topColor = topColor,
+	                .bottomColor = bottomColor,
 	                .isGlyph = false,
 	        });
 }
@@ -128,7 +130,8 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	        &(struct Uniforms) {
 	                .position = position,
 	                .size = { atlas->advances[index], atlas->height },
-	                .color = color,
+	                .topColor = color,
+	                .bottomColor = color,
 	                .glyphTopLeft = { atlas->xPositions[index], 0 },
 	                .glyphSize = { atlas->advances[index], atlas->height },
 	                .isGlyph = true,
@@ -339,21 +342,24 @@ static CVReturn displayLinkCallback(
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, height),
+	        simd_make_float4(0.03, 0.03, 0.03, 0.95),
 	        simd_make_float4(0.03, 0.03, 0.03, 0.95));
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(500, 50),
 	        simd_make_float2(100, 200),
-	        buttonColor);
+	        buttonColor, buttonColor);
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, 76),
-	        simd_make_float4(0.1, 0.1, 0.1, trafficLightAlpha));
+	        simd_make_float4(0.1, 0.1, 0.1, trafficLightAlpha),
+	        simd_make_float4(0.05, 0.05, 0.05, trafficLightAlpha));
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 76),
 	        simd_make_float2(width, 2),
+	        simd_make_float4(0, 0, 0, trafficLightAlpha),
 	        simd_make_float4(0, 0, 0, trafficLightAlpha));
 
 	NSString* s = self.window.title;
