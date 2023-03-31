@@ -20,8 +20,8 @@ struct FontAtlas {
 struct FontAtlas fontGlyph()
 {
 	CTFontRef font = (__bridge CTFontRef)
-	        [NSFont systemFontOfSize:14
-	                          weight:NSFontWeightBold];
+	        [NSFont fontWithName:@"Lucida Grande"
+	                        size:13];
 
 	uint16_t encoded[26] = { 0 };
 	for (size_t i = 0; i < 26; i++)
@@ -343,8 +343,8 @@ static CVReturn displayLinkCallback(
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, height),
-	        simd_make_float4(0.03, 0.03, 0.03, 0.95),
-	        simd_make_float4(0.03, 0.03, 0.03, 0.95));
+	        simd_make_float4(0.85, 0.85, 0.85, 1),
+	        simd_make_float4(0.85, 0.85, 0.85, 1));
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(500, 50),
@@ -354,14 +354,20 @@ static CVReturn displayLinkCallback(
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, 0),
 	        simd_make_float2(width, kTitlebarHeight),
-	        simd_make_float4(0.1, 0.1, 0.1, trafficLightAlpha),
-	        simd_make_float4(0.05, 0.05, 0.05, trafficLightAlpha));
+	        simd_make_float4(0.85, 0.85, 0.85, trafficLightAlpha),
+	        simd_make_float4(0.45, 0.45, 0.45, trafficLightAlpha));
 
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(0, kTitlebarHeight),
 	        simd_make_float2(width, 2),
-	        simd_make_float4(0, 0, 0, trafficLightAlpha),
-	        simd_make_float4(0, 0, 0, trafficLightAlpha));
+	        simd_make_float4(0.6, 0.6, 0.6, trafficLightAlpha),
+	        simd_make_float4(0.6, 0.6, 0.6, trafficLightAlpha));
+
+	GeometryBuilderPushRect(&gb,
+	        simd_make_float2(0, kTitlebarHeight + 2),
+	        simd_make_float2(width, 2),
+	        simd_make_float4(0.2, 0.2, 0.2, trafficLightAlpha),
+	        simd_make_float4(0.2, 0.2, 0.2, trafficLightAlpha));
 
 	NSString* s = self.window.title;
 	float textWidth = 0;
@@ -387,8 +393,13 @@ static CVReturn displayLinkCallback(
 		GeometryBuilderPushGlyph(&gb,
 		        &atlas,
 		        index,
+		        simd_make_float2(x, y + 2),
+		        simd_make_float4(1, 1, 1, trafficLightAlpha * 0.5));
+		GeometryBuilderPushGlyph(&gb,
+		        &atlas,
+		        index,
 		        simd_make_float2(x, y),
-		        simd_make_float4(0.7, 0.7, 0.7, trafficLightAlpha));
+		        simd_make_float4(0, 0, 0, trafficLightAlpha));
 		x += atlas.advances[index];
 	}
 
