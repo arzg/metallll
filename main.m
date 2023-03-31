@@ -19,8 +19,8 @@ struct FontAtlas {
 struct FontAtlas fontGlyph()
 {
 	CTFontRef font = (__bridge CTFontRef)
-	        [NSFont systemFontOfSize:80
-	                          weight:NSFontWeightBlack];
+	        [NSFont systemFontOfSize:14
+	                          weight:NSFontWeightBold];
 
 	uint16_t encoded[26] = { 0 };
 	for (size_t i = 0; i < 26; i++)
@@ -333,7 +333,6 @@ static CVReturn displayLinkCallback(
 	float width = metalLayer.drawableSize.width;
 	float height = metalLayer.drawableSize.height;
 	float factor = 1;
-	float padding = 100;
 
 	struct GeometryBuilder gb = GeometryBuilderCreate(uniformsBuffer);
 
@@ -342,32 +341,49 @@ static CVReturn displayLinkCallback(
 	        simd_make_float2(width, height),
 	        simd_make_float4(0.03, 0.03, 0.03, 0.95));
 
-	char* s = "lorem ipsum\ndolor sit amet";
-	float x = padding;
-	float y = padding;
-	for (; *s; s++) {
-		if (*s == '\n') {
-			x = padding;
-			y += atlas.height;
-			continue;
-		}
-		if (*s == ' ') {
-			x += atlas.spaceAdvance;
-			continue;
-		}
-		uint8_t index = *s - 'a';
-		GeometryBuilderPushGlyph(&gb,
-		        &atlas,
-		        index,
-		        simd_make_float2(x, y),
-		        simd_make_float4(0.7, 0.7, 0.7, 1));
-		x += atlas.advances[index];
-	}
-
 	GeometryBuilderPushRect(&gb,
 	        simd_make_float2(500, 50),
 	        simd_make_float2(100, 200),
 	        buttonColor);
+
+	GeometryBuilderPushRect(&gb,
+	        simd_make_float2(0, 0),
+	        simd_make_float2(width, 76),
+	        simd_make_float4(0.1, 0.1, 0.1, trafficLightAlpha));
+
+	GeometryBuilderPushRect(&gb,
+	        simd_make_float2(0, 76),
+	        simd_make_float2(width, 2),
+	        simd_make_float4(0, 0, 0, trafficLightAlpha));
+
+	NSString* s = self.window.title;
+	float textWidth = 0;
+	for (int i = 0; i < [s length]; i++) {
+		char c = [s characterAtIndex:i];
+		if (c == ' ') {
+			textWidth += atlas.spaceAdvance;
+			continue;
+		}
+		uint8_t index = c - 'a';
+		textWidth += atlas.advances[index];
+	}
+
+	float x = (width - textWidth) / 2;
+	float y = 20;
+	for (int i = 0; i < [s length]; i++) {
+		char c = [s characterAtIndex:i];
+		if (c == ' ') {
+			x += atlas.spaceAdvance;
+			continue;
+		}
+		uint8_t index = c - 'a';
+		GeometryBuilderPushGlyph(&gb,
+		        &atlas,
+		        index,
+		        simd_make_float2(x, y),
+		        simd_make_float4(0.7, 0.7, 0.7, trafficLightAlpha));
+		x += atlas.advances[index];
+	}
 
 	[commandEncoder setVertexBuffer:uniformsBuffer
 	                         offset:0
@@ -478,24 +494,30 @@ static CVReturn displayLinkCallback(
 - (void)mouseDragged:(NSEvent*)event
 {
 	[self updateMouseState:event];
+	NSPoint loc = event.locationInWindow;
+	loc.y = self.bounds.size.height - loc.y;
+	loc.x *= self.window.screen.backingScaleFactor;
+	loc.y *= self.window.screen.backingScaleFactor;
+	if (loc.y < 76)
+		[self.window performWindowDragWithEvent:event];
 }
 
 - (void)mouseExited:(NSEvent*)event
 {
-	trafficLightAlphaD = -0.01;
+	trafficLightAlphaD = -0.03;
 }
 
 - (void)updateMouseState:(NSEvent*)event
 {
 	NSPoint loc = event.locationInWindow;
 	loc.y = self.bounds.size.height - loc.y;
-	if (loc.y < 30)
-		trafficLightAlphaD = 0.08;
-	else
-		trafficLightAlphaD = -0.01;
-
 	loc.x *= self.window.screen.backingScaleFactor;
 	loc.y *= self.window.screen.backingScaleFactor;
+
+	if (loc.y < 76)
+		trafficLightAlphaD = 0.08;
+	else
+		trafficLightAlphaD = -0.03;
 
 	if (loc.x > 500 && loc.x < 600 && loc.y > 50 && loc.y < 250 && isMouseDown)
 		buttonColor = simd_make_float4(0.4, 0.4, 0.4, 1);
