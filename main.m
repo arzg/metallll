@@ -173,6 +173,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	multisampleTextureDesc.pixelFormat = metalLayer.pixelFormat;
 	multisampleTextureDesc.textureType = MTLTextureType2DMultisample;
 	multisampleTextureDesc.sampleCount = kSampleCount;
+	multisampleTextureDesc.usage = MTLTextureUsageRenderTarget;
 
 	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	indexBuffer = [device newBufferWithBytes:indexBufferData
@@ -300,7 +301,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 	if (size.width == 0 && size.height == 0)
 		return;
-	metalLayer.drawableSize = size;
+
 	metalLayer.contentsScale = scaleFactor;
 
 	[self updateMultisampleTexture:size];
@@ -309,6 +310,13 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 - (void)updateMultisampleTexture:(NSSize)size
 {
+	if (size.width < multisampleTextureDesc.width && size.height < multisampleTextureDesc.height)
+		return;
+
+	// Amortize texture allocation and deallocation during resize.
+	size.width = roundf(size.width * 1.2);
+	size.height = roundf(size.height * 1.2);
+
 	metalLayer.drawableSize = size;
 	multisampleTextureDesc.width = size.width;
 	multisampleTextureDesc.height = size.height;
@@ -349,8 +357,8 @@ static CVReturn displayLinkCallback(
 	        [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
 	[commandEncoder setRenderPipelineState:renderPipeline];
 
-	float width = metalLayer.drawableSize.width;
-	float height = metalLayer.drawableSize.height;
+	float width = self.frame.size.width * self.window.screen.backingScaleFactor;
+	float height = self.frame.size.height * self.window.screen.backingScaleFactor;
 	float factor = 1;
 
 	struct GeometryBuilder gb = GeometryBuilderCreate(uniformsBuffer);
