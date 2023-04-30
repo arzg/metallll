@@ -570,6 +570,16 @@ static CVReturn displayLinkCallback(
 	                                                  userInfo:nil]];
 }
 
+- (void)viewWillStartLiveResize
+{
+	CVDisplayLinkStop(displayLink);
+}
+
+- (void)viewDidEndLiveResize
+{
+	CVDisplayLinkStart(displayLink);
+}
+
 @end
 
 int main()
