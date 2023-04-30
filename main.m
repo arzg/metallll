@@ -4,7 +4,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 
-#define kSampleCount 4
 #define kMaxQuadCount 1024
 #define kTitlebarHeight 76
 
@@ -146,9 +145,6 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	id<MTLCommandQueue> commandQueue;
 	id<MTLRenderPipelineState> renderPipeline;
 
-	MTLTextureDescriptor* multisampleTextureDesc;
-	id<MTLTexture> multisampleTexture;
-
 	id<MTLBuffer> indexBuffer;
 	id<MTLBuffer> uniformsBuffer;
 	id<MTLTexture> texture;
@@ -168,12 +164,6 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	device = MTLCreateSystemDefaultDevice();
 	self = [super initWithFrame:frame];
 	self.wantsLayer = YES;
-
-	multisampleTextureDesc = [[MTLTextureDescriptor alloc] init];
-	multisampleTextureDesc.pixelFormat = metalLayer.pixelFormat;
-	multisampleTextureDesc.textureType = MTLTextureType2DMultisample;
-	multisampleTextureDesc.sampleCount = kSampleCount;
-	multisampleTextureDesc.usage = MTLTextureUsageRenderTarget;
 
 	uint16_t indexBufferData[6] = { 0, 1, 2, 0, 2, 3 };
 	indexBuffer = [device newBufferWithBytes:indexBufferData
@@ -211,7 +201,6 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 	MTLRenderPipelineDescriptor* desc =
 	        [[MTLRenderPipelineDescriptor alloc] init];
-	desc.rasterSampleCount = kSampleCount;
 
 	MTLRenderPipelineColorAttachmentDescriptor* framebufferAttachment
 	        = desc.colorAttachments[0];
@@ -273,7 +262,6 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	metalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
 	metalLayer.wantsExtendedDynamicRangeContent = YES;
 	metalLayer.opaque = NO;
-	metalLayer.framebufferOnly = NO;
 
 	metalLayer.allowsNextDrawableTimeout = NO;
 
@@ -306,26 +294,10 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	if (size.width == 0 && size.height == 0)
 		return;
 
+	metalLayer.drawableSize = size;
 	metalLayer.contentsScale = scaleFactor;
 
-	[self updateMultisampleTexture:size];
 	[self updateTrafficLights];
-}
-
-- (void)updateMultisampleTexture:(NSSize)size
-{
-	if (size.width < multisampleTextureDesc.width && size.height < multisampleTextureDesc.height)
-		return;
-
-	// Amortize texture allocation and deallocation during resize.
-	size.width = roundf(size.width * 1.2);
-	size.height = roundf(size.height * 1.2);
-
-	metalLayer.drawableSize = size;
-	multisampleTextureDesc.width = size.width;
-	multisampleTextureDesc.height = size.height;
-	multisampleTexture
-	        = [device newTextureWithDescriptor:multisampleTextureDesc];
 }
 
 static CVReturn displayLinkCallback(
@@ -351,10 +323,9 @@ static CVReturn displayLinkCallback(
 	id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
 	MTLRenderPassDescriptor* passDesc = [[MTLRenderPassDescriptor alloc] init];
-	passDesc.colorAttachments[0].texture = multisampleTexture;
-	passDesc.colorAttachments[0].resolveTexture = drawable.texture;
+	passDesc.colorAttachments[0].texture = drawable.texture;
 	passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
-	passDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+	passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
 	passDesc.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
 
 	id<MTLRenderCommandEncoder> commandEncoder =
