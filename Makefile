@@ -12,6 +12,10 @@ out/metallll: main.m out/shaders.metallib
 		-framework MetalKit \
 		-o $@ \
 		$<
+	@ mkdir -p out/metallll.app/Contents/MacOS
+	@ mkdir -p out/metallll.app/Contents/Resources
+	@ cp out/metallll out/metallll.app/Contents/MacOS/metallll
+	@ cp out/shaders.metallib out/metallll.app/Contents/Resources/shaders.metallib
 
 out/shaders.metallib: shaders.metal
 	@ mkdir -p out
