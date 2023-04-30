@@ -203,7 +203,9 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	        [device newLibraryWithURL:path
 	                            error:&error];
 	if (error != nil) {
-		NSLog(@"%@", error);
+		[NSApp activateIgnoringOtherApps:YES];
+		NSAlert* alert = [NSAlert alertWithError:error];
+		[alert runModal];
 		exit(1);
 	}
 
@@ -228,7 +230,9 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	renderPipeline = [device newRenderPipelineStateWithDescriptor:desc
 	                                                        error:&error];
 	if (error != nil) {
-		NSLog(@"%@", error);
+		[NSApp activateIgnoringOtherApps:YES];
+		NSAlert* alert = [NSAlert alertWithError:error];
+		[alert runModal];
 		exit(1);
 	}
 
