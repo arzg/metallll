@@ -198,7 +198,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	             withBytes:atlas.pixels
 	           bytesPerRow:atlas.width];
 
-	NSURL* path = [NSURL fileURLWithPath:@"out/shaders.metallib" isDirectory:false];
+	NSURL* path = [[NSBundle mainBundle] URLForResource:@"shaders" withExtension:@"metallib"];
 	id<MTLLibrary> library =
 	        [device newLibraryWithURL:path
 	                            error:&error];
