@@ -139,7 +139,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 	        });
 }
 
-@interface MainView : NSView {
+@interface MainView : NSView <CALayerDelegate> {
 	CAMetalLayer* metalLayer;
 	CVDisplayLinkRef displayLink;
 	id<MTLDevice> device;
@@ -165,19 +165,9 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 - (id)initWithFrame:(CGRect)frame
 {
+	device = MTLCreateSystemDefaultDevice();
 	self = [super initWithFrame:frame];
 	self.wantsLayer = YES;
-	self.layer = [CAMetalLayer layer];
-	metalLayer = (CAMetalLayer*)self.layer;
-	device = MTLCreateSystemDefaultDevice();
-	metalLayer.device = device;
-
-	metalLayer.pixelFormat = MTLPixelFormatRGBA16Float;
-	metalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
-	metalLayer.wantsExtendedDynamicRangeContent = YES;
-	self.layer.opaque = NO;
-
-	metalLayer.framebufferOnly = NO;
 
 	multisampleTextureDesc = [[MTLTextureDescriptor alloc] init];
 	multisampleTextureDesc.pixelFormat = metalLayer.pixelFormat;
@@ -268,6 +258,27 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 		CVDisplayLinkStop(displayLink);
 }
 
+- (CALayer*)makeBackingLayer
+{
+	metalLayer = [CAMetalLayer layer];
+	metalLayer.device = device;
+	metalLayer.delegate = self;
+
+	metalLayer.pixelFormat = MTLPixelFormatRGBA16Float;
+	metalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
+	metalLayer.wantsExtendedDynamicRangeContent = YES;
+	metalLayer.opaque = NO;
+	metalLayer.framebufferOnly = NO;
+
+	metalLayer.allowsNextDrawableTimeout = NO;
+
+	metalLayer.autoresizingMask = kCALayerHeightSizable | kCALayerWidthSizable;
+	metalLayer.needsDisplayOnBoundsChange = YES;
+	metalLayer.presentsWithTransaction = YES;
+
+	return metalLayer;
+}
+
 - (void)viewDidChangeBackingProperties
 {
 	[super viewDidChangeBackingProperties];
@@ -283,11 +294,14 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 - (void)updateDrawableSize
 {
 	NSSize size = self.bounds.size;
-	size.width *= self.window.screen.backingScaleFactor;
-	size.height *= self.window.screen.backingScaleFactor;
+	float scaleFactor = self.window.screen.backingScaleFactor;
+	size.width *= scaleFactor;
+	size.height *= scaleFactor;
+
 	if (size.width == 0 && size.height == 0)
 		return;
 	metalLayer.drawableSize = size;
+	metalLayer.contentsScale = scaleFactor;
 
 	[self updateMultisampleTexture:size];
 	[self updateTrafficLights];
@@ -295,6 +309,7 @@ void GeometryBuilderPushGlyph(struct GeometryBuilder* gb, const struct FontAtlas
 
 - (void)updateMultisampleTexture:(NSSize)size
 {
+	metalLayer.drawableSize = size;
 	multisampleTextureDesc.width = size.width;
 	multisampleTextureDesc.height = size.height;
 	multisampleTexture
@@ -310,15 +325,15 @@ static CVReturn displayLinkCallback(
         void* displayLinkContext)
 {
 	MainView* view = (__bridge MainView*)displayLinkContext;
-	[view renderOneFrame];
+	dispatch_async(dispatch_get_main_queue(), ^{
+	    [view.layer setNeedsDisplay];
+	});
 	return kCVReturnSuccess;
 }
 
-- (void)renderOneFrame
+- (void)displayLayer:(CALayer*)layer
 {
-	dispatch_async(dispatch_get_main_queue(), ^{
-	    [self updateTrafficLights];
-	});
+	[self updateTrafficLights];
 
 	id<CAMetalDrawable> drawable = [metalLayer nextDrawable];
 	id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
@@ -434,8 +449,9 @@ static CVReturn displayLinkCallback(
 
 	[commandEncoder endEncoding];
 
-	[commandBuffer presentDrawable:drawable];
 	[commandBuffer commit];
+	[commandBuffer waitUntilScheduled];
+	[drawable present];
 }
 
 - (void)updateTrafficLights
